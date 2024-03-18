@@ -86,8 +86,8 @@ class BalatroGame:
             for rank in Card.Ranks:
                 self.deck.append(Card(rank, suit))
 
-        self.hand = []
-        self.selection = []
+        self.hand_indexes = []
+        self.highlighted_indexes = []
 
         self.hand_size = 8
         self.hands = 4
@@ -104,93 +104,17 @@ class BalatroGame:
 
         self.state = self.State.IN_PROGRESS
 
-    def select_card(self, hand_index: int):
-        self.selection.append(self.hand.pop(hand_index))
+    def highlight_card(self, hand_index: int):
+        self.highlighted_indexes.append(self.hand_indexes.pop(hand_index))
 
     def play_hand(self):
         self.round_hands -= 1
 
-        chips = 0
-        mult = 0
-        scoring_cards = None
-
-        played_cards = [self.deck[card_index] for card_index in self.selection]
-
-        flush = len({card.suit for card in played_cards}) == 1
-        straight = True
-
-        sorted_ranks = sorted([card.rank.value for card in played_cards])
-        if sorted_ranks != [0, 1, 2, 3, 12]:
-            for i in range(len(sorted_ranks) - 1):
-                if sorted_ranks[i] + 1 != sorted_ranks[i + 1]:
-                    straight = False
-                    break
-        
-        rank_counts = {14: [], 15: []}
-        for card in played_cards:
-            if card.rank not in rank_counts:
-                rank_counts[card.rank] = [card]
-            else:
-                rank_counts[card.rank].append(card)
-
-        primary_hand, secondary_hand = sorted(rank_counts.values(), key=lambda x: len(x), reverse=True)[0:2]
-
-        if flush and len(primary_hand) == 5:
-            chips += 160
-            mult += 16
-            scoring_cards = played_cards
-        elif flush and len(primary_hand) == 3 and len(secondary_hand) == 2:
-            chips += 140
-            mult += 14
-            scoring_cards = played_cards
-        elif len(primary_hand) == 5:
-            chips += 120
-            mult += 12
-            scoring_cards = played_cards
-        elif straight and flush:
-            chips += 100
-            mult += 8
-            scoring_cards = played_cards
-        elif len(primary_hand) == 4:
-            chips += 60
-            mult += 7
-            scoring_cards = primary_hand
-        elif len(primary_hand) == 3 and len(secondary_hand) == 2:
-            chips += 40
-            mult += 4
-            scoring_cards = played_cards
-        elif flush:
-            chips += 35
-            mult += 4
-            scoring_cards = played_cards
-        elif straight:
-            chips += 30
-            mult += 4
-            scoring_cards = played_cards
-        elif len(primary_hand) == 3:
-            chips += 30
-            mult += 3
-            scoring_cards = primary_hand
-        elif len(primary_hand) == 2 and len(secondary_hand) == 2:
-            chips += 20
-            mult += 2
-            scoring_cards = primary_hand + secondary_hand
-        elif len(primary_hand) == 2:
-            chips += 10
-            mult += 2
-            scoring_cards = primary_hand
-        else:
-            chips += 5
-            mult += 1
-            scoring_cards = [max(played_cards, key=lambda card: card.rank.value)]
-
-        for card in scoring_cards:
-            chips += card.chip_value()
-
-        self.round_score += chips * mult
-        print(chips * mult)
+        score = self._evaluate_hand([self.deck[card_index] for card_index in self.highlighted_indexes])
+        self.round_score += score
 
         if self.round_score >= self.blinds[self.blind_index]:
+            print("round beat", self.round_score, "/", self.blinds[self.blind_index])
             self._end_round()
         elif self.round_hands == 0:
             self.state = self.State.LOSS
@@ -210,24 +134,102 @@ class BalatroGame:
         self._reset_cards()
         remaining_cards = [i for i in range(len(self.deck)) if not self.deck[i].played]
 
-        for card_index in np.random.choice(remaining_cards, min(self.hand_size - len(self.hand), len(remaining_cards)), replace=False):
+        for card_index in np.random.choice(remaining_cards, min(self.hand_size - len(self.hand_indexes), len(remaining_cards)), replace=False):
             self.deck[card_index].played = True
-            self.hand.append(card_index)
+            self.hand_indexes.append(card_index)
 
     def _reset_cards(self):
         for card in self.deck:
             card.played = False
         
-        self.hand.clear()
-        self.selection.clear()
+        self.hand_indexes.clear()
+        self.highlighted_indexes.clear()
+
+    def _evaluate_hand(hand):
+        chips = 0
+        mult = 0
+        scoring_cards = None
+
+        flush = len({card.suit for card in hand}) == 1
+        straight = True
+
+        sorted_ranks = sorted([card.rank.value for card in hand])
+        if sorted_ranks != [0, 1, 2, 3, 12]:
+            for i in range(len(sorted_ranks) - 1):
+                if sorted_ranks[i] + 1 != sorted_ranks[i + 1]:
+                    straight = False
+                    break
+        
+        rank_counts = {14: [], 15: []}
+        for card in hand:
+            if card.rank not in rank_counts:
+                rank_counts[card.rank] = [card]
+            else:
+                rank_counts[card.rank].append(card)
+
+        primary_hand, secondary_hand = sorted(rank_counts.values(), key=lambda x: len(x), reverse=True)[0:2]
+
+        if flush and len(primary_hand) == 5:
+            chips += 160
+            mult += 16
+            scoring_cards = hand
+        elif flush and len(primary_hand) == 3 and len(secondary_hand) == 2:
+            chips += 140
+            mult += 14
+            scoring_cards = hand
+        elif len(primary_hand) == 5:
+            chips += 120
+            mult += 12
+            scoring_cards = hand
+        elif straight and flush:
+            chips += 100
+            mult += 8
+            scoring_cards = hand
+        elif len(primary_hand) == 4:
+            chips += 60
+            mult += 7
+            scoring_cards = primary_hand
+        elif len(primary_hand) == 3 and len(secondary_hand) == 2:
+            chips += 40
+            mult += 4
+            scoring_cards = hand
+        elif flush:
+            chips += 35
+            mult += 4
+            scoring_cards = hand
+        elif straight:
+            chips += 30
+            mult += 4
+            scoring_cards = hand
+        elif len(primary_hand) == 3:
+            chips += 30
+            mult += 3
+            scoring_cards = primary_hand
+        elif len(primary_hand) == 2 and len(secondary_hand) == 2:
+            chips += 20
+            mult += 2
+            scoring_cards = primary_hand + secondary_hand
+        elif len(primary_hand) == 2:
+            chips += 10
+            mult += 2
+            scoring_cards = primary_hand
+        else:
+            chips += 5
+            mult += 1
+            scoring_cards = [max(hand, key=lambda card: card.rank.value)]
+
+        for card in scoring_cards:
+            chips += card.chip_value()
+
+        return chips * mult
 
     def print_deck(self):
         print([str(card) for card in self.deck])
 
     def print_hand(self):
-        print([str(self.deck[card_index]) for card_index in self.hand])
+        print([str(self.deck[card_index]) for card_index in self.hand_indexes])
 
-    def print_selected(self):
-        print([str(self.deck[card_index]) for card_index in self.selection])
+    def print_highlighted(self):
+        print([str(self.deck[card_index]) for card_index in self.highlighted_indexes])
 
         
