@@ -7,43 +7,104 @@ import gymnasium as gym
 from gymnasium import spaces
 
 class BalatroEnv(gym.Env):
-    metadata = {}
-
-    BAD_ACTION_PENALTY = -0.1
+    metadata = {"render_modes": ["ansi"], "render_fps": 4}
 
     MAX_DECK_SIZE = 52
     MAX_HAND_SIZE = 8
+    MAX_ACTIONS = MAX_HAND_SIZE + 4
 
-    # ACTIONS = Enum('Action', ['PLAY_HAND', 'DISCARD_HAND'], start=0)
-    MAX_ACTIONS = 2 + MAX_HAND_SIZE
+    MAX_HANDS = 10
+    MAX_DISCARDS = 8
 
     def __init__(self, render_mode=None):
+        self.action_space = spaces.Discrete(self.MAX_ACTIONS)
 
-        self.action_space = spaces.Discrete(10)
+        self.observation_space = spaces.Dict({
+            "deck": spaces.Dict({
+                "cards": spaces.Box(0, 52, shape=(self.MAX_DECK_SIZE,), dtype=int), 
+                "cards_played": spaces.MultiBinary(self.MAX_DECK_SIZE)
+            }),
+            "hand": spaces.Box(0, 51, shape=(self.MAX_HAND_SIZE,), dtype=int),
+            "highlighted": spaces.Box(0, 51, shape=(5,), dtype=int),
+            "blinds": spaces.Box(0, 10000, shape=(3,), dtype=int),
+            "blind_index": spaces.Discrete(3),
+            "hands": spaces.Discrete(self.MAX_HANDS),
+            "discards": spaces.Discrete(self.MAX_DISCARDS),
+            "round_score": spaces.Discrete(100000),
+            "round_hands": spaces.Discrete(self.MAX_HANDS),
+            "round_discards": spaces.Discrete(self.MAX_DISCARDS),
+        })
 
-        deck_space = spaces.MultiDiscrete([53] * 52)
-        hand_space = spaces.MultiDiscrete([52] * 8)
-        selected_space = spaces.MultiDiscrete([52] * 5)
+        self.game = BalatroGame()
 
-        self.observation_space = spaces.Tuple(deck_space, hand_space, selected_space)
+        self.render_mode = render_mode
 
     def step(self, action):
-        if action not in self._get_legal_moves:
-            pass
-        pass
+        # if action not in self._valid_actions():
+        #     raise RuntimeError("Environment tried to take an invalid action.")
+        self.resolve_action(action)
+         
+        reward = 1 if self.game.state == BalatroGame.State.WIN else 0
+        done = self.game.state != BalatroGame.State.LOSS
+        return self._get_observation(), reward, done, False, {}
 
-    def resolve_action(self):
-        pass
+    def resolve_action(self, action):
+        if action == 0:
+            self.game.play_hand()
+        elif action == 1: 
+            self.game.discard_hand()
+        else:
+            self.game.highlight_card(action - 2)
 
-    def reset(self):
-        pass
+    def reset(self, seed=None, options=None):
+        self.game = BalatroGame()
+        return self._get_observation(), {}
 
     def render(self):
+        if self.render_mode == "ansi":
+            res = f"Ante: {self.game.ante}, Blind: {self.game.blind_index + 1}/3\n"
+            res += f"Score: {self.game.round_score}/{self.game.blinds[self.game.blind_index]}\n\n"
+            res += f"Highlighted: {self.game.highlighted_to_string()}\n"
+            res += f"Hand: {self.game.hand_to_string()}\n"
+            return res
+
+    def _get_observation(self):
+
+        cards = np.zeros((self.MAX_DECK_SIZE,), dtype=int)
+        cards_played = np.zeros((self.MAX_DECK_SIZE,), dtype=int)
+
+        for i in range(min(len(self.game.deck), self.MAX_DECK_SIZE)):
+            cards[i] = self.game.deck[i].encode() + 1
+            cards_played[i] = int(self.game.deck[i].played)
+
+        hand = self._normalize_array(self.game.hand_indexes, self.MAX_HAND_SIZE)
+        highlighted = self._normalize_array(self.game.highlighted_indexes, 5)
+
+        return {
+            "deck": {
+                "cards": cards, 
+                "cards_played": cards_played
+            },
+            "hand": hand,
+            "highlighted": highlighted,
+            "blinds": np.asarray(self.game.blinds, dtype=int),
+            "blind_index": self.game.blind_index,
+            "hands": self.game.hands,
+            "discards": self.game.discards,
+            "round_score": self.game.round_score,
+            "round_hands": self.game.round_hands,
+            "round_discards": self.game.round_discards,
+        }
+    
+    @staticmethod
+    def _normalize_array(arr, size):
+        normalized_array = np.zeros((size,), dtype=int)
+        normalized_array[:len(arr)] = arr
+        return normalized_array
+
+    def _valid_actions(self):
         pass
 
-    def _get_legal_moves(self):
-
-        [self.ACTIONS.PLAY_HAND, self.ACTIONS.DISCARD_HAND]
-        return 
-    
+    def action_masks(self):
+        pass
     

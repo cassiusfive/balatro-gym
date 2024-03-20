@@ -48,6 +48,9 @@ class Card:
     def chip_value(self):
         return self.base_chip_values[self.rank]
     
+    def encode(self):
+        return self.rank.value + self.suit.value * len(self.Ranks)
+    
     def __str__(self):
         return self.rank.name + " OF " + self.suit.name
 
@@ -73,11 +76,6 @@ class BalatroGame:
         WIN = 1
         LOSS = 2
 
-    class Stages(Enum):
-        BLIND_SELECT = 0
-        ROUND = 1
-        SHOP = 2
-
     def __init__(self, deck="yellow", stake="white"):
         self.deck = []
 
@@ -93,16 +91,18 @@ class BalatroGame:
         self.hands = 4
         self.discards = 3
         
-        self.ante = 0
+        self.ante = 1
         self.blind_index = 0
         self.blinds = [300, 450, 600]
 
-        self.stage = self.Stages.ROUND
         self.round_score = 0
         self.round_hands = self.hands
         self.round_discards = self.discards
 
         self.state = self.State.IN_PROGRESS
+        self.round_in_progress = False
+
+        self._draw_cards()
 
     def highlight_card(self, hand_index: int):
         self.highlighted_indexes.append(self.hand_indexes.pop(hand_index))
@@ -114,7 +114,6 @@ class BalatroGame:
         self.round_score += score
 
         if self.round_score >= self.blinds[self.blind_index]:
-            print("round beat", self.round_score, "/", self.blinds[self.blind_index])
             self._end_round()
         elif self.round_hands == 0:
             self.state = self.State.LOSS
@@ -126,25 +125,29 @@ class BalatroGame:
         self._draw_cards()
 
     def _end_round(self):
+        for card in self.deck:
+            card.played = False
+
+        self.hand_indexes.clear()
+        self.highlighted_indexes.clear()
+        self.round_hands = self.hands
+        self.round_discards = self.discards
         self.round_score = 0
+
         self.blind_index += 1
-        self._reset_cards()
+        if self.blind_index == 3:
+            self.blind_index = 0
+            self.ante += 1
 
     def _draw_cards(self):
-        self._reset_cards()
+        self.highlighted_indexes.clear()
         remaining_cards = [i for i in range(len(self.deck)) if not self.deck[i].played]
 
         for card_index in np.random.choice(remaining_cards, min(self.hand_size - len(self.hand_indexes), len(remaining_cards)), replace=False):
             self.deck[card_index].played = True
             self.hand_indexes.append(card_index)
 
-    def _reset_cards(self):
-        for card in self.deck:
-            card.played = False
-        
-        self.hand_indexes.clear()
-        self.highlighted_indexes.clear()
-
+    @staticmethod
     def _evaluate_hand(hand):
         chips = 0
         mult = 0
@@ -223,13 +226,13 @@ class BalatroGame:
 
         return chips * mult
 
-    def print_deck(self):
-        print([str(card) for card in self.deck])
+    def deck_to_string(self):
+        return ", ".join([str(card) for card in self.deck])
 
-    def print_hand(self):
-        print([str(self.deck[card_index]) for card_index in self.hand_indexes])
+    def hand_to_string(self):
+        return ", ".join([str(self.deck[card_index]) for card_index in self.hand_indexes])
 
-    def print_highlighted(self):
-        print([str(self.deck[card_index]) for card_index in self.highlighted_indexes])
+    def highlighted_to_string(self):
+        return ", ".join([str(self.deck[card_index]) for card_index in self.highlighted_indexes])
 
         
