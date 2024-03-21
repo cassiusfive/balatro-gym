@@ -45,7 +45,7 @@ class BalatroEnv(gym.Env):
         self.resolve_action(action)
          
         reward = 1 if self.game.state == BalatroGame.State.WIN else 0
-        done = self.game.state != BalatroGame.State.LOSS
+        done = self.game.state != BalatroGame.State.IN_PROGRESS
         return self._get_observation(), reward, done, False, {}
 
     def resolve_action(self, action):
@@ -115,5 +115,5 @@ class BalatroEnv(gym.Env):
         return actions
 
     def action_masks(self):  
-        return [action in self._valid_actions() for action in np.arange(self.MAX_ACTIONS, dtype=int)]
+        return [action in self.valid_actions() for action in np.arange(self.MAX_ACTIONS, dtype=int)]
     

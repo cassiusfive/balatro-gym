@@ -19,3 +19,7 @@ def test_straight():
     hand = [Card(Card.Ranks(i), Card.Suits.CLUBS) for i in range(0, 4)]
     hand.append(Card(Card.Ranks.ACE, Card.Suits.DIAMONDS))
     assert BalatroGame._evaluate_hand(hand) == 220
+
+def test_high_card():
+    hand = [Card(Card.Ranks.ACE, Card.Suits.SPADES)]
+    assert BalatroGame._evaluate_hand(hand) == 16

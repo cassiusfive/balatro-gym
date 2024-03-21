@@ -141,6 +141,7 @@ class BalatroGame:
         if self.blind_index == 3:
             self.blind_index = 0
             self.ante += 1
+            self.state = self.State.WIN
         self._start_round()
 
     def _draw_cards(self):
@@ -157,7 +158,7 @@ class BalatroGame:
         mult = 0
         scoring_cards = None
 
-        flush = len({card.suit for card in hand}) == 1
+        flush = len(hand) == 5 and len({card.suit for card in hand}) == 1
         straight = len(hand) == 5
 
         sorted_ranks = sorted([card.rank.value for card in hand])
@@ -238,5 +239,3 @@ class BalatroGame:
 
     def highlighted_to_string(self):
         return ", ".join([str(self.deck[card_index]) for card_index in self.highlighted_indexes])
-
-        
