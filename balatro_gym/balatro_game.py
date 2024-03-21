@@ -123,6 +123,9 @@ class BalatroGame:
     def discard_hand(self):
         self.round_discards -= 1
         self._draw_cards()
+    
+    def _start_round(self):
+        self._draw_cards()
 
     def _end_round(self):
         for card in self.deck:
@@ -138,6 +141,7 @@ class BalatroGame:
         if self.blind_index == 3:
             self.blind_index = 0
             self.ante += 1
+        self._start_round()
 
     def _draw_cards(self):
         self.highlighted_indexes.clear()
@@ -154,7 +158,7 @@ class BalatroGame:
         scoring_cards = None
 
         flush = len({card.suit for card in hand}) == 1
-        straight = True
+        straight = len(hand) == 5
 
         sorted_ranks = sorted([card.rank.value for card in hand])
         if sorted_ranks != [0, 1, 2, 3, 12]:

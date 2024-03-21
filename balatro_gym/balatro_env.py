@@ -11,7 +11,7 @@ class BalatroEnv(gym.Env):
 
     MAX_DECK_SIZE = 52
     MAX_HAND_SIZE = 8
-    MAX_ACTIONS = MAX_HAND_SIZE + 4
+    MAX_ACTIONS = 2 + MAX_HAND_SIZE
 
     MAX_HANDS = 10
     MAX_DISCARDS = 8
@@ -40,8 +40,8 @@ class BalatroEnv(gym.Env):
         self.render_mode = render_mode
 
     def step(self, action):
-        # if action not in self._valid_actions():
-        #     raise RuntimeError("Environment tried to take an invalid action.")
+        if action not in self.valid_actions():
+            raise RuntimeError("Environment tried to take an invalid action.")
         self.resolve_action(action)
          
         reward = 1 if self.game.state == BalatroGame.State.WIN else 0
@@ -102,9 +102,18 @@ class BalatroEnv(gym.Env):
         normalized_array[:len(arr)] = arr
         return normalized_array
 
-    def _valid_actions(self):
-        pass
+    def valid_actions(self):
+        actions = []
+        if len(self.game.highlighted_indexes) > 0:
+            if self.game.round_hands > 0:
+                actions.append(0)
+            if self.game.round_discards > 0:
+                actions.append(1)
+        if len(self.game.highlighted_indexes) < 5:
+            for i in range(len(self.game.hand_indexes)):
+                actions.append(i + 2)
+        return actions
 
-    def action_masks(self):
-        pass
+    def action_masks(self):  
+        return [action in self._valid_actions() for action in np.arange(self.MAX_ACTIONS, dtype=int)]
     
