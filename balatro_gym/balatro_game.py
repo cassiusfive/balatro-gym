@@ -119,6 +119,7 @@ class BalatroGame:
             self.state = self.State.LOSS
         else:
             self._draw_cards()
+        return score
 
     def discard_hand(self):
         self.round_discards -= 1

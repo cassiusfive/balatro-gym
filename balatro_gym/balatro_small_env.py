@@ -15,7 +15,7 @@ class BalatroSmallEnv(gym.Env):
     MAX_HANDS = 10
     MAX_DISCARDS = 8
 
-    def __init__(self, render_mode=None, chip_threshold=500):
+    def __init__(self, render_mode=None, chip_threshold=500, reward_dense=True):
         self.action_space = spaces.Discrete(self.MAX_ACTIONS)
 
         self.observation_space = spaces.Dict({
@@ -31,6 +31,7 @@ class BalatroSmallEnv(gym.Env):
         })
 
         self.chip_threshold = chip_threshold
+        self.reward_dense = reward_dense
 
         self.game = BalatroGame()
         self.game.blinds[0] = chip_threshold
@@ -40,19 +41,24 @@ class BalatroSmallEnv(gym.Env):
     def step(self, action):
         if action not in self.valid_actions():
             raise RuntimeError("Environment tried to take an invalid action.")
-        self.resolve_action(action)
-         
-        reward = 1 if self.game.blind_index == 1 else 0
+        reward = self.resolve_action(action)
+
+        if self.game.blind_index == 1: 
+            reward = self.chip_threshold
+
         done = self.game.state != BalatroGame.State.IN_PROGRESS or reward == 1
         return self._get_observation(), reward, done, False, {}
 
     def resolve_action(self, action):
+        reward = 0
         if action == 0:
-            self.game.play_hand()
+            score = self.game.play_hand()
+            reward += score
         elif action == 1: 
             self.game.discard_hand()
         else:
             self.game.highlight_card(action - 2)
+        return reward if self.reward_dense else 0
 
     def reset(self, seed=None, options=None):
         self.game = BalatroGame()

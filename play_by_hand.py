@@ -3,7 +3,7 @@ import gymnasium as gym
 
 from gymnasium.wrappers import FlattenObservation
 
-env = gym.make("BalatroSmall-v0", render_mode="ansi")
+env = gym.make("BalatroSmall-v0", chip_threshold=250, render_mode="ansi")
 env = FlattenObservation(env)
 observation = env.reset()
 
