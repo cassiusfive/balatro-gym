@@ -1,0 +1,7 @@
+# Core RL env API
+gymnasium>=1.1.1      # fixes "ModuleNotFoundError: gymnasium"
+
+# Common scientific stack – add/remove as you learn what the code really needs
+numpy>=1.26
+pandas>=2.2
+matplotlib>=3.9

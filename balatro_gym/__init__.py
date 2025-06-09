@@ -1,13 +1,7 @@
-from balatro_gym.balatro_env import BalatroEnv # noqa
-from balatro_gym.balatro_small_env import BalatroSmallEnv # noqa
-from gymnasium.envs.registration import register
+from .env import EightCardDrawEnv
 
-register(
-    id="Balatro-v0",
-    entry_point="balatro_gym:BalatroEnv",
-)
+def make(id: str):
+    if id == "EightCardDraw-v0":
+        return EightCardDrawEnv()
+    raise ValueError(f"Unknown id {id}")
 
-register(
-    id="BalatroSmall-v0",
-    entry_point="balatro_gym:BalatroSmallEnv",
-)
