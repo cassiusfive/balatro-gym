@@ -1,159 +1,102 @@
-"""scoring_engine.py – Hybrid truth‑table + dynamic modifiers
+"""balatro_gym/scoring_engine.py
 
-A lightweight yet extensible scoring core for Balatro RL.
+Hybrid scorer with **dual truth tables**:
+  * `chip_table[hand_type, level]` – multiplies the *base chip payout*.
+  * `mult_table[hand_type, level]` – multiplies the traditional Mult value.
 
-Why a hybrid?
--------------
-* **Truth table** (numpy ndarray) encodes the *static* value of each
-  `HandType` × `Level` combination after all *global* effects (Planets,
-  Spectral cards that permanently change ordering, etc.).
-* **Dynamic modifiers** – a list of callables executed at score‑time for
-  *contextual* bonuses (jokers that look at suit counts, remaining discards,
-  etc.).  These are cheap Python functions because their number is small.
+`apply_consumable()` mutates both tables for Planet cards.
+Dynamic jokers / vouchers register with `register_modifier()`; these functions
+execute *after* the table lookups, receiving `(score, hand, engine)` and must
+return the modified score.
 
-Schema
-------
-`HandType` – enum 0‑8 (High‑Card .. Straight‑Flush).  `Level` – 0‑2 where
-0 = bronze, 1 = silver, 2 = gold (placeholder, adjust to real game).
-
-The table stores a *multiplier* (float32).  Chips are computed as:
-    chips = base_hand_value(hand_type, level) * table[hand_type, level]
-
-Consumables mutate the table in‑place:
-    engine.apply_consumable(Planet.MARS)  # e.g., ×1.4 to Straight
-
-Dynamic jokers register a function:
-    engine.register_modifier(lambda score, hand, ctx: score + 30)
-
-Usage
------
-    engine = ScoreEngine()
-    engine.apply_consumable(Planet.MARS)
-    engine.register_modifier(RideTheBus())
-
-    chips = engine.score(hand, context)
+HandType indices must match any other module that references them.
 """
 from __future__ import annotations
 
+from enum import IntEnum
+from typing import List, Callable, Tuple
+
 import numpy as np
-from enum import IntEnum, auto
-from typing import Callable, List, Tuple
+
+from balatro_gym.planets import Planet, PLANET_MULT
 
 # ---------------------------------------------------------------------------
-# HandType & Level enums (minimal placeholder)
+# HandType enumeration (keep in sync across project)
 # ---------------------------------------------------------------------------
-
 class HandType(IntEnum):
-    HIGH_CARD = 0
-    ONE_PAIR = auto()
-    TWO_PAIR = auto()
-    THREE_KIND = auto()
-    STRAIGHT = auto()
-    FLUSH = auto()
-    FULL_HOUSE = auto()
-    FOUR_KIND = auto()
-    STRAIGHT_FLUSH = auto()
+    HIGH_CARD       = 0
+    ONE_PAIR        = 1
+    TWO_PAIR        = 2
+    THREE_KIND      = 3
+    STRAIGHT        = 4
+    FLUSH           = 5
+    FULL_HOUSE      = 6
+    FOUR_KIND       = 7
+    STRAIGHT_FLUSH  = 8
 
-NUM_HAND_TYPES = len(HandType)
-NUM_LEVELS = 3  # bronze, silver, gold  (simplified)
+NUM_HAND_TYPES: int = len(HandType)
+NUM_LEVELS:     int = 3   # bronze / silver / gold placeholder
 
-# ---------------------------------------------------------------------------
-# Planet effects (subset)
-# ---------------------------------------------------------------------------
+# Base chip payout for each HandType (bronze); silver=×1.5, gold=×2
+BASE_CHIPS: Tuple[int, ...] = (10, 20, 30, 40, 50, 60, 80, 120, 300)
 
-class Planet(IntEnum):
-    MERCURY = 0  # Straight scores ×1.2
-    VENUS = 1    # Flush ×1.2
-    MARS = 2     # Straight ×1.4
-    JUPITER = 3  # Straight Flush ×1.3
-    # ... etc.
-
-PLANET_MULT: dict[Planet, Tuple[HandType, float]] = {
-    Planet.MERCURY: (HandType.STRAIGHT, 1.2),
-    Planet.VENUS: (HandType.FLUSH, 1.2),
-    Planet.MARS: (HandType.STRAIGHT, 1.4),
-    Planet.JUPITER: (HandType.STRAIGHT_FLUSH, 1.3),
-}
+# Type signature for dynamic joker modifier
+ModifierFn = Callable[[float, List[int], "ScoreEngine"], float]
 
 # ---------------------------------------------------------------------------
 # ScoreEngine
 # ---------------------------------------------------------------------------
-
-ModifierFn = Callable[[float, List[int], "ScoreEngine"], float]
-
 class ScoreEngine:
-    """Hybrid truth‑table scorer."""
+    """Central scoring utility used by BalatroGame and environment."""
 
     def __init__(self):
-        # base multipliers (float32) – start at 1.0
-        self.table = np.ones((NUM_HAND_TYPES, NUM_LEVELS), dtype=np.float32)
-        # dynamic modifier functions
+        # Two tables initialised to 1.0 (float32 for speed/MEM)
+        self.chip_table: np.ndarray = np.ones((NUM_HAND_TYPES, NUM_LEVELS), dtype=np.float32)
+        self.mult_table: np.ndarray = np.ones_like(self.chip_table)
         self.modifiers: List[ModifierFn] = []
 
-    # ------------- consumable hooks (truth‑table mutations) -------------
-
+    # ---------------- handlers ----------------
     def apply_consumable(self, consumable):
-        """Dispatch based on consumable type."""
+        """Mutate tables when a consumable (Planet, Tarot, etc.) is used."""
         if isinstance(consumable, Planet):
-            hand, mult = PLANET_MULT[consumable]
-            self.table[hand, :] *= mult
-        # TODO: Tarot, Spectral, etc.
-
-    # ------------- dynamic modifiers ------------------------------------
+            hand_id, factor = PLANET_MULT[consumable]
+            self.chip_table[hand_id, :] *= factor
+            self.mult_table[hand_id, :] *= factor
+        # TODO: add Tarot/Spectral hooks later
 
     def register_modifier(self, fn: ModifierFn):
+        """Register a per-hand modifier (e.g., RideTheBus, GreenJoker)."""
         self.modifiers.append(fn)
 
-    # ------------- scoring ----------------------------------------------
+    # ---------------- base chip helper ----------------
+    @staticmethod
+    def _base_chip(hand_type: int, level: int) -> float:
+        return BASE_CHIPS[hand_type] * (1.0 + 0.5 * level)  # bronze 1×, silver 1.5×, gold 2×
 
-    def base_hand_value(self, hand_type: HandType, level: int) -> float:
-        """Return canonical chip value before multipliers (placeholder)."""
-        BASE = {
-            HandType.HIGH_CARD: 10,
-            HandType.ONE_PAIR: 20,
-            HandType.TWO_PAIR: 30,
-            HandType.THREE_KIND: 40,
-            HandType.STRAIGHT: 50,
-            HandType.FLUSH: 60,
-            HandType.FULL_HOUSE: 80,
-            HandType.FOUR_KIND: 120,
-            HandType.STRAIGHT_FLUSH: 300,
-        }
-        return BASE[hand_type] * (1 + level * 0.5)  # bronze/silver/gold scaling
+    # ---------------- public API ----------------
+    def score(self, hand_card_ids: List[int], hand_type: int, level: int) -> float:
+        """Compute final chip payout for a scored 5‑card hand.
 
-    def score(self, hand_cards: List[int], hand_type: HandType, level: int) -> float:
-        """Compute final chip score for a hand."""
-        score = self.base_hand_value(hand_type, level)
-        score *= self.table[hand_type, level]
-
+        Args:
+            hand_card_ids: list/iterable of 5 ints (0‑51) for dynamic jokers.
+            hand_type:     int enum 0‑8 matching HandType.
+            level:         0 bronze, 1 silver, 2 gold.
+        Returns:
+            Final chip float after all multipliers & modifiers.
+        """
+        # 1. base chip * chip_table multiplier
+        base = self._base_chip(hand_type, level) * self.chip_table[hand_type, level]
+        # 2. multiply by global hand multiplier
+        score = base * self.mult_table[hand_type, level]
+        # 3. Apply dynamic jokers / vouchers
         for fn in self.modifiers:
-            score = fn(score, hand_cards, self)
-        return score
+            score = fn(score, hand_card_ids, self)
+        return float(score)
 
-# ---------------------------------------------------------------------------
-# Example dynamic modifier implementation
-# ---------------------------------------------------------------------------
-
-class RideTheBus:
-    """Joker that gains +1 Mult per hand without a face card."""
-
-    def __init__(self):
-        self.mult = 1.0
-
-    def __call__(self, base_score: float, hand: List[int], engine: ScoreEngine) -> float:
-        if all((c % 13) < 10 for c in hand):  # no face cards
-            self.mult += 1.0
-        return base_score * self.mult
-
-# ---------------------------------------------------------------------------
-# Unit‑test demo
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    engine = ScoreEngine()
-    engine.apply_consumable(Planet.MARS)
-    engine.register_modifier(RideTheBus())
-
-    dummy_hand = [0, 1, 2, 3, 4]  # unsuited straight (ranks 2‑6)
-    chips = engine.score(dummy_hand, HandType.STRAIGHT, 0)
-    print("Straight score with Mars + RideTheBus: ", chips)
+    # ---------------- debug helper ----------------
+    def table_snapshot(self) -> dict:
+        """Return a dict copy of current multiplier tables (for logging)."""
+        return {
+            "chip_table":  self.chip_table.copy(),
+            "mult_table":  self.mult_table.copy(),
+        }
