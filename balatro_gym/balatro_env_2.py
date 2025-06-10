@@ -8,6 +8,7 @@ This is the complete, production-ready Balatro environment with all systems inte
 - Tarot/Spectral card effects
 - Complete action space and observations
 - Proper reward shaping for RL
+- Full RNG control and reproducibility
 """
 
 from __future__ import annotations
@@ -15,19 +16,24 @@ from __future__ import annotations
 import numpy as np
 from typing import Dict, Optional, List, Any, Tuple
 from enum import Enum, IntEnum
+from dataclasses import dataclass, field
 import random
+import pickle
 
 import gymnasium as gym
 from gymnasium import spaces
 
+# Import card primitives first
+from balatro_gym.cards import Card, Suit, Rank
+
 # Import all game modules
-from balatro_gym.balatro_game_v2 import BalatroGame, Card
+from balatro_gym.balatro_game_v2 import BalatroGame
 from balatro_gym.scoring_engine_accurate import ScoreEngine, HandType
 from balatro_gym.shop import Shop, ShopAction, PlayerState, ItemType
 from balatro_gym.jokers import JokerInfo, JOKER_LIBRARY
 from balatro_gym.planets import Planet
 from balatro_gym.consumables import (
-    Card as ConsumableCard, Suit, Rank, Enhancement, Edition, Seal,
+    Enhancement, Edition, Seal,
     TarotCard, SpectralCard, ConsumableManager
 )
 from balatro_gym.unified_scoring import UnifiedScorer, ScoringContext
@@ -84,6 +90,259 @@ JOKER_ID_TO_NAME = {joker.id: joker.name for joker in JOKER_LIBRARY}
 JOKER_NAME_TO_ID = {joker.name: joker.id for joker in JOKER_LIBRARY}
 
 # ---------------------------------------------------------------------------
+# RNG System for Full Reproducibility
+# ---------------------------------------------------------------------------
+
+class DeterministicRNG:
+    """Centralized RNG system with separate streams for each subsystem"""
+    
+    def __init__(self, master_seed: Optional[int] = None):
+        self.master_seed = master_seed or random.randint(0, 2**32 - 1)
+        self.streams = {}
+        self.history = []
+        self._initialize_streams()
+    
+    def _initialize_streams(self):
+        """Create separate RNG streams for each game subsystem"""
+        stream_names = [
+            'deck_shuffle', 'card_draw', 'shop_generation', 'shop_reroll',
+            'joker_effects', 'blind_selection', 'skip_rewards', 'pack_opening',
+            'voucher_appearance', 'boss_abilities', 'random_events',
+            'card_enhancement', 'edition_rolls', 'seal_applications',
+            'consumable_effects', 'score_variance'
+        ]
+        
+        for i, name in enumerate(stream_names):
+            # Each stream gets a unique seed derived from master seed
+            stream_seed = (self.master_seed + i * 1000) % (2**32)
+            self.streams[name] = random.Random(stream_seed)
+    
+    def get_float(self, stream: str, low: float = 0.0, high: float = 1.0) -> float:
+        """Get random float from a specific stream"""
+        if stream not in self.streams:
+            raise ValueError(f"Unknown RNG stream: {stream}")
+        
+        value = self.streams[stream].uniform(low, high)
+        self.history.append((stream, 'float', value))
+        return value
+    
+    def get_int(self, stream: str, low: int, high: int) -> int:
+        """Get random integer from a specific stream (inclusive)"""
+        if stream not in self.streams:
+            raise ValueError(f"Unknown RNG stream: {stream}")
+        
+        value = self.streams[stream].randint(low, high)
+        self.history.append((stream, 'int', value))
+        return value
+    
+    def choice(self, stream: str, sequence: List[Any]) -> Any:
+        """Make a random choice from a sequence"""
+        if stream not in self.streams:
+            raise ValueError(f"Unknown RNG stream: {stream}")
+        
+        if not sequence:
+            raise ValueError("Cannot choose from empty sequence")
+        
+        value = self.streams[stream].choice(sequence)
+        self.history.append((stream, 'choice', value))
+        return value
+    
+    def shuffle(self, stream: str, sequence: List[Any]) -> None:
+        """Shuffle a sequence in-place"""
+        if stream not in self.streams:
+            raise ValueError(f"Unknown RNG stream: {stream}")
+        
+        self.streams[stream].shuffle(sequence)
+        self.history.append((stream, 'shuffle', len(sequence)))
+    
+    def get_state(self) -> Dict[str, Any]:
+        """Get complete RNG state for saving"""
+        return {
+            'master_seed': self.master_seed,
+            'streams': {name: rng.getstate() for name, rng in self.streams.items()},
+            'history_length': len(self.history)
+        }
+    
+    def set_state(self, state: Dict[str, Any]) -> None:
+        """Restore complete RNG state"""
+        self.master_seed = state['master_seed']
+        for name, stream_state in state['streams'].items():
+            if name in self.streams:
+                self.streams[name].setstate(stream_state)
+
+# ---------------------------------------------------------------------------
+# Unified Game State
+# ---------------------------------------------------------------------------
+
+@dataclass
+class UnifiedGameState:
+    """Single source of truth for all game state"""
+    # Core game state
+    ante: int = 1
+    round: int = 1  # 1=small, 2=big, 3=boss
+    phase: Phase = Phase.BLIND_SELECT
+    chips_needed: int = 300
+    chips_scored: int = 0
+    money: int = 4
+    
+    # Cards and hands
+    deck: List[Card] = field(default_factory=list)
+    hand_indexes: List[int] = field(default_factory=list)
+    selected_cards: List[int] = field(default_factory=list)
+    hands_left: int = 4
+    discards_left: int = 3
+    hand_size: int = 8
+    
+    # Collections
+    jokers: List[JokerInfo] = field(default_factory=list)
+    consumables: List[str] = field(default_factory=list)
+    vouchers: List[str] = field(default_factory=list)
+    joker_slots: int = 5
+    consumable_slots: int = 2
+    
+    # Shop state
+    shop_inventory: List[Any] = field(default_factory=list)
+    shop_reroll_cost: int = 5
+    
+    # Statistics
+    hands_played_total: int = 0
+    hands_played_ante: int = 0
+    best_hand_this_ante: int = 0
+    jokers_sold: int = 0
+    
+    # Hand levels
+    hand_levels: Dict[HandType, int] = field(default_factory=dict)
+    
+    # Card enhancements/editions/seals (card index -> property)
+    card_enhancements: Dict[int, Enhancement] = field(default_factory=dict)
+    card_editions: Dict[int, Edition] = field(default_factory=dict)
+    card_seals: Dict[int, Seal] = field(default_factory=dict)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dict for joker effects and other systems"""
+        return {
+            'deck': self.deck,
+            'hand': [self.deck[i] for i in self.hand_indexes if i < len(self.deck)],
+            'jokers': [{'name': j.name, 'id': j.id} for j in self.jokers],
+            'consumables': self.consumables,
+            'vouchers': self.vouchers,
+            'money': self.money,
+            'ante': self.ante,
+            'round': self.round,
+            'hands_left': self.hands_left,
+            'discards_left': self.discards_left,
+            'hand_size': self.hand_size,
+            'joker_slots': self.joker_slots,
+            'consumable_slots': self.consumable_slots,
+            'hands_played': self.hands_played_total,
+            'hands_played_ante': self.hands_played_ante,
+        }
+    
+    def copy(self) -> 'UnifiedGameState':
+        """Create a deep copy of the state"""
+        return UnifiedGameState(
+            ante=self.ante,
+            round=self.round,
+            phase=self.phase,
+            chips_needed=self.chips_needed,
+            chips_scored=self.chips_scored,
+            money=self.money,
+            deck=self.deck.copy() if self.deck else [],
+            hand_indexes=self.hand_indexes.copy(),
+            selected_cards=self.selected_cards.copy(),
+            hands_left=self.hands_left,
+            discards_left=self.discards_left,
+            hand_size=self.hand_size,
+            jokers=self.jokers.copy(),
+            consumables=self.consumables.copy(),
+            vouchers=self.vouchers.copy(),
+            joker_slots=self.joker_slots,
+            consumable_slots=self.consumable_slots,
+            shop_inventory=self.shop_inventory.copy(),
+            shop_reroll_cost=self.shop_reroll_cost,
+            hands_played_total=self.hands_played_total,
+            hands_played_ante=self.hands_played_ante,
+            best_hand_this_ante=self.best_hand_this_ante,
+            jokers_sold=self.jokers_sold,
+            hand_levels=self.hand_levels.copy(),
+        )
+
+# ---------------------------------------------------------------------------
+# Card Adapter for Converting Between Representations
+# ---------------------------------------------------------------------------
+
+class CardAdapter:
+    """Convert between different card representations used by various modules"""
+    
+    @staticmethod
+    def from_game_card(game_card: Any) -> Card:
+        """Convert old game card format to new Card primitive"""
+        # Handle old game card format (may have rank/suit as attributes)
+        if hasattr(game_card, 'rank') and hasattr(game_card, 'suit'):
+            rank_value = game_card.rank.value + 2 if hasattr(game_card.rank, 'value') else game_card.rank
+            suit_value = game_card.suit.value if hasattr(game_card.suit, 'value') else game_card.suit
+            return Card(rank=Rank(rank_value), suit=Suit(suit_value))
+        return game_card  # Already in new format
+    
+    @staticmethod
+    def to_scoring_format(card: Card, card_idx: Optional[int] = None, state: Optional[UnifiedGameState] = None) -> Any:
+        """Convert Card to scoring engine format with enhancements"""
+        # Base chip values for each rank
+        chip_values = {
+            Rank.TWO: 2, Rank.THREE: 3, Rank.FOUR: 4, Rank.FIVE: 5,
+            Rank.SIX: 6, Rank.SEVEN: 7, Rank.EIGHT: 8, Rank.NINE: 9,
+            Rank.TEN: 10, Rank.JACK: 10, Rank.QUEEN: 10, Rank.KING: 10,
+            Rank.ACE: 11
+        }
+        
+        # Get enhancements/editions/seals if we have state and card index
+        enhancement = None
+        edition = None
+        seal = None
+        
+        if state and card_idx is not None:
+            enhancement = state.card_enhancements.get(card_idx)
+            edition = state.card_editions.get(card_idx)
+            seal = state.card_seals.get(card_idx)
+        
+        return type('ScoringCard', (), {
+            'rank': card.rank.value,  # Already in 2-14 range
+            'suit': card.suit.name.title(),  # Convert to string name
+            'base_value': chip_values.get(card.rank, 0),
+            'chip_value': lambda: chip_values.get(card.rank, 0),
+            'enhancement': enhancement,
+            'edition': edition,
+            'seal': seal
+        })
+    
+    @staticmethod
+    def to_consumable_format(card: Card, card_idx: Optional[int] = None, state: Optional[UnifiedGameState] = None) -> Any:
+        """Convert Card to consumable module format"""
+        # Get enhancements/editions/seals
+        enhancement = Enhancement.NONE
+        edition = Edition.NONE
+        seal = Seal.NONE
+        
+        if state and card_idx is not None:
+            enhancement = state.card_enhancements.get(card_idx, Enhancement.NONE)
+            edition = state.card_editions.get(card_idx, Edition.NONE)
+            seal = state.card_seals.get(card_idx, Seal.NONE)
+        
+        # Create a card-like object that consumable system expects
+        return type('ConsumableCard', (), {
+            'rank': card.rank,
+            'suit': card.suit,
+            'enhancement': enhancement,
+            'edition': edition,
+            'seal': seal
+        })
+    
+    @staticmethod
+    def encode_to_int(card: Card) -> int:
+        """Encode card to 0-51 integer for observations"""
+        return int(card)  # Uses Card.__int__ method
+
+# ---------------------------------------------------------------------------
 # Complete Balatro RL Environment
 # ---------------------------------------------------------------------------
 
@@ -95,15 +354,27 @@ class BalatroEnv(gym.Env):
     def __init__(self, *, render_mode: str | None = None, seed: int | None = None):
         super().__init__()
         self.render_mode = render_mode
-        if seed is not None:
-            np.random.seed(seed)
-            random.seed(seed)
-
+        self._seed = seed
+        
+        # Initialize RNG system
+        self.rng = DeterministicRNG(seed)
+        
         # Action and observation spaces
         self.action_space = spaces.Discrete(ACTION_SPACE_SIZE)
         self.observation_space = self._create_observation_space()
-
-        # Initialize all systems
+        
+        # Initialize state
+        self.state = UnifiedGameState()
+        
+        # Game systems (initialized in reset)
+        self.engine: Optional[ScoreEngine] = None
+        self.game: Optional[BalatroGame] = None
+        self.joker_effects_engine: Optional[CompleteJokerEffects] = None
+        self.consumable_manager: Optional[ConsumableManager] = None
+        self.unified_scorer: Optional[UnifiedScorer] = None
+        self.shop: Optional[Shop] = None
+        
+        # Initialize environment
         self.reset()
 
     def _create_observation_space(self):
@@ -157,65 +428,63 @@ class BalatroEnv(gym.Env):
     def reset(self, *, seed: int | None = None, options: dict | None = None):
         """Reset the environment to initial state"""
         if seed is not None:
-            np.random.seed(seed)
-            random.seed(seed)
+            self._seed = seed
+            self.rng = DeterministicRNG(seed)
         
-        # Initialize core game systems
+        # Reset state
+        self.state = UnifiedGameState()
+        
+        # Initialize core game systems with RNG
         self.engine = ScoreEngine()
+        
+        # Create initial deck using new Card primitives
+        initial_deck = []
+        for suit in Suit:
+            for rank in Rank:
+                initial_deck.append(Card(rank=rank, suit=suit))
+        
+        # Shuffle deck
+        self.rng.shuffle('deck_shuffle', initial_deck)
+        
+        # Initialize game with our deck
         self.game = BalatroGame(engine=self.engine)
+        # Replace game's deck with our Card primitives
+        self.game.deck = initial_deck
+        self.state.deck = initial_deck
+        
         self.joker_effects_engine = CompleteJokerEffects()
         self.consumable_manager = ConsumableManager()
-        self.player = PlayerState(chips=4)
         
         # Initialize unified scorer
         self.unified_scorer = UnifiedScorer(self.engine, self.joker_effects_engine)
         
-        # Game state
-        self.ante = 1
-        self.round = 1  # 1=small, 2=big, 3=boss
-        self.phase = Phase.BLIND_SELECT
-        self.chips_needed = BLIND_CHIPS[1]['small']
+        # Initialize hand levels
+        for hand_type in HandType:
+            if hand_type != HandType.NONE:
+                self.state.hand_levels[hand_type] = self.engine.get_hand_level(hand_type)
         
-        # Collections
-        self.jokers = []  # List of owned joker names
-        self.consumables = []  # List of consumable names
-        self.joker_slots = 5
-        self.consumable_slots = 2
-        
-        # Card state
-        self.selected_cards = []
-        self.hand_array = np.full(8, -1, dtype=np.int8)
-        
-        # Shop
-        self.shop: Optional[Shop] = None
-        
-        # Statistics
-        self.hands_played = 0
-        self.total_hands_played = 0
-        self.hands_played_this_ante = 0
-        self.best_hand_this_ante = 0
-        self.jokers_sold = 0
-        
-        # Create game state dict for joker effects
-        self._update_game_state()
+        # Sync state with game
+        self._sync_state_from_game()
         
         return self._get_observation(), {}
 
-    def _update_game_state(self):
-        """Update game state dict for joker effects"""
-        self.game_state = {
-            'deck': self.game.deck,
-            'hand': [self.game.deck[i] for i in self.game.hand_indexes],
-            'jokers': [{'name': name} for name in self.jokers],
-            'consumables': self.consumables,
-            'money': self.player.chips,
-            'ante': self.ante,
-            'hands_left': self.game.round_hands,
-            'discards_left': self.game.round_discards,
-            'hand_stats': {},
-            'joker_slots': self.joker_slots,
-            'consumable_slots': self.consumable_slots,
-        }
+    def _sync_state_from_game(self):
+        """Sync unified state from game systems"""
+        if self.game:
+            self.state.deck = self.game.deck
+            self.state.hand_indexes = self.game.hand_indexes
+            self.state.hands_left = self.game.round_hands
+            self.state.discards_left = self.game.round_discards
+            self.state.chips_scored = self.game.round_score
+
+    def _sync_state_to_game(self):
+        """Sync game systems from unified state"""
+        if self.game:
+            self.game.deck = self.state.deck
+            self.game.hand_indexes = self.state.hand_indexes
+            self.game.round_hands = self.state.hands_left
+            self.game.round_discards = self.state.discards_left
+            self.game.round_score = self.state.chips_scored
 
     def step(self, action: int):
         """Execute action and return step results"""
@@ -224,13 +493,13 @@ class BalatroEnv(gym.Env):
             return self._get_observation(), -1.0, False, False, {'error': 'Invalid action'}
         
         # Route to appropriate handler
-        if self.phase == Phase.PLAY:
+        if self.state.phase == Phase.PLAY:
             return self._step_play(action)
-        elif self.phase == Phase.SHOP:
+        elif self.state.phase == Phase.SHOP:
             return self._step_shop(action)
-        elif self.phase == Phase.BLIND_SELECT:
+        elif self.state.phase == Phase.BLIND_SELECT:
             return self._step_blind_select(action)
-        elif self.phase == Phase.PACK_OPEN:
+        elif self.state.phase == Phase.PACK_OPEN:
             return self._step_pack_open(action)
 
     def _step_play(self, action: int):
@@ -240,30 +509,23 @@ class BalatroEnv(gym.Env):
         info = {}
         
         if action == ACTION_PLAY_HAND:
-            if len(self.selected_cards) == 0:
+            if len(self.state.selected_cards) == 0:
                 return self._get_observation(), -1.0, False, False, {'error': 'No cards selected'}
             
             # Get the actual cards for scoring
             selected_cards = []
-            for idx in self.selected_cards:
-                if idx < len(self.game.hand_indexes):
-                    card_idx = self.game.hand_indexes[idx]
-                    deck_card = self.game.deck[card_idx]
-                    
-                    # Create enhanced card object with all properties
-                    card = type('Card', (), {
-                        'rank': deck_card.rank.value + 2,  # Convert to 2-14 range
-                        'suit': ['Spades', 'Clubs', 'Hearts', 'Diamonds'][deck_card.suit.value],
-                        'base_value': deck_card.chip_value(),
-                        'chip_value': deck_card.chip_value,
-                        'enhancement': getattr(deck_card, 'enhancement', None),
-                        'edition': getattr(deck_card, 'edition', None),
-                        'seal': getattr(deck_card, 'seal', None)
-                    })
-                    selected_cards.append(card)
+            for idx in self.state.selected_cards:
+                if idx < len(self.state.hand_indexes):
+                    card_idx = self.state.hand_indexes[idx]
+                    if card_idx < len(self.state.deck):
+                        card = self.state.deck[card_idx]
+                        # Convert to scoring format with enhancements
+                        scoring_card = CardAdapter.to_scoring_format(card, card_idx, self.state)
+                        selected_cards.append(scoring_card)
             
             # Highlight cards in the game
-            for idx in self.selected_cards:
+            self._sync_state_to_game()
+            for idx in self.state.selected_cards:
                 if idx < len(self.game.hand_indexes):
                     self.game.highlight_card(idx)
             
@@ -281,29 +543,26 @@ class BalatroEnv(gym.Env):
                 scoring_cards=selected_cards,
                 hand_type=hand_type,
                 hand_type_name=hand_type_name,
-                game_state=self.game_state
+                game_state=self.state.to_dict()
             )
             
             # Use unified scorer
             final_score, breakdown = self.unified_scorer.score_hand(scoring_context)
             
-            # Update game score
-            self.game.round_score += final_score
-            
-            # Update statistics
-            self.hands_played += 1
-            self.total_hands_played += 1
-            self.hands_played_this_ante += 1
-            self.best_hand_this_ante = max(self.best_hand_this_ante, final_score)
+            # Update state
+            self.state.chips_scored += final_score
+            self.state.hands_played_total += 1
+            self.state.hands_played_ante += 1
+            self.state.best_hand_this_ante = max(self.state.best_hand_this_ante, final_score)
             
             # Track hand usage for jokers like Obelisk
             self.engine.hand_play_counts[hand_type] += 1
             
             # Clear selection
-            self.selected_cards = []
+            self.state.selected_cards = []
             
             # Calculate reward
-            progress = self.game.round_score / self.chips_needed
+            progress = self.state.chips_scored / self.state.chips_needed
             reward = 10 * progress + (final_score / 1000)
             
             # Add scoring breakdown to info
@@ -311,120 +570,113 @@ class BalatroEnv(gym.Env):
             info['final_score'] = final_score
             
             # Check round end conditions
-            if self.game.state == BalatroGame.State.WIN:
-                reward += 1000
-                terminated = True
-                info['won'] = True
-            elif self.game.state == BalatroGame.State.LOSS:
-                reward -= 100
-                terminated = True
-                info['failed'] = True
-            elif self.game.round_score >= self.chips_needed:
+            if self.state.chips_scored >= self.state.chips_needed:
                 reward += 50
                 self._advance_round()
                 info['beat_blind'] = True
-            elif self.game.round_hands == 0:
-                self.game.state = BalatroGame.State.LOSS
+            elif self.state.hands_left <= 1:
                 reward -= 100
                 terminated = True
                 info['failed'] = True
             else:
+                self.state.hands_left -= 1
+                self.game.round_hands = self.state.hands_left
                 self.game._draw_cards()
-                self._update_hand_array()
+                self._sync_state_from_game()
                 
         elif action == ACTION_DISCARD:
-            if self.game.round_discards <= 0:
+            if self.state.discards_left <= 0:
                 return self._get_observation(), -1.0, False, False, {'error': 'No discards left'}
             
             # Get discarded cards
             discarded = []
-            for idx in self.selected_cards:
-                if idx < len(self.game.hand_indexes):
-                    card_idx = self.game.hand_indexes[idx]
-                    deck_card = self.game.deck[card_idx]
-                    card = type('Card', (), {
-                        'rank': deck_card.rank.value + 2,
-                        'suit': ['Spades', 'Clubs', 'Hearts', 'Diamonds'][deck_card.suit.value]
-                    })
-                    discarded.append(card)
+            for idx in self.state.selected_cards:
+                if idx < len(self.state.hand_indexes):
+                    card_idx = self.state.hand_indexes[idx]
+                    if card_idx < len(self.state.deck):
+                        card = self.state.deck[card_idx]
+                        # Create simple card format for discard effects
+                        discard_card = type('Card', (), {
+                            'rank': card.rank.value,
+                            'suit': card.suit.name.title()
+                        })
+                        discarded.append(discard_card)
             
             # Apply discard effects
             discard_context = {
                 'phase': 'discard',
                 'discarded_cards': discarded,
                 'last_discarded_card': discarded[-1] if discarded else None,
-                'is_first_discard': self.game.round_discards == self.game.discards
+                'is_first_discard': self.state.discards_left == self.game.discards
             }
             
-            for joker_name in self.jokers:
-                joker = type('Joker', (), {'name': joker_name})
+            for joker in self.state.jokers:
                 effect = self.joker_effects_engine.apply_joker_effect(
-                    joker, discard_context, self.game_state
+                    type('Joker', (), {'name': joker.name}), 
+                    discard_context, 
+                    self.state.to_dict()
                 )
                 if effect and 'money' in effect:
-                    self.player.chips += effect['money']
+                    self.state.money += effect['money']
             
             # Execute discard
-            for idx in sorted(self.selected_cards, reverse=True):
+            self._sync_state_to_game()
+            for idx in sorted(self.state.selected_cards, reverse=True):
                 if idx < len(self.game.hand_indexes):
                     self.game.highlight_card(idx)
             
             self.game.discard_hand()
-            self.selected_cards = []
-            self._update_hand_array()
+            self.state.discards_left -= 1
+            self.state.selected_cards = []
+            self._sync_state_from_game()
             reward = 0.5
             
         elif action in ACTION_SELECT_CARDS:
             card_idx = action - 2
-            if card_idx < len(self.game.hand_indexes):
-                if card_idx in self.selected_cards:
-                    self.selected_cards.remove(card_idx)
+            if card_idx < len(self.state.hand_indexes):
+                if card_idx in self.state.selected_cards:
+                    self.state.selected_cards.remove(card_idx)
                 else:
-                    self.selected_cards.append(card_idx)
+                    self.state.selected_cards.append(card_idx)
                     
         elif action in ACTION_USE_CONSUMABLE:
             reward, info = self._use_consumable(action - 10)
         
-        self._update_game_state()
         return self._get_observation(), reward, terminated, False, info
 
     def _use_consumable(self, consumable_idx: int) -> Tuple[float, Dict]:
         """Use a consumable with full tarot/spectral effects"""
-        if consumable_idx >= len(self.consumables):
+        if consumable_idx >= len(self.state.consumables):
             return -1.0, {'error': 'Invalid consumable'}
         
-        consumable_name = self.consumables[consumable_idx]
+        consumable_name = self.state.consumables[consumable_idx]
         
         # Get target cards if needed
         target_cards = []
-        if len(self.selected_cards) > 0:
-            for idx in self.selected_cards:
-                if idx < len(self.game.hand_indexes):
-                    card_idx = self.game.hand_indexes[idx]
-                    deck_card = self.game.deck[card_idx]
-                    card = ConsumableCard(
-                        rank=Rank(deck_card.rank.value + 2),
-                        suit=Suit(deck_card.suit.value),
-                        enhancement=Enhancement(getattr(deck_card, 'enhancement', Enhancement.NONE)),
-                        edition=Edition(getattr(deck_card, 'edition', Edition.NONE)),
-                        seal=Seal(getattr(deck_card, 'seal', Seal.NONE))
-                    )
-                    target_cards.append(card)
+        if len(self.state.selected_cards) > 0:
+            for idx in self.state.selected_cards:
+                if idx < len(self.state.hand_indexes):
+                    card_idx = self.state.hand_indexes[idx]
+                    if card_idx < len(self.state.deck):
+                        card = self.state.deck[card_idx]
+                        # Convert to consumable format
+                        consumable_card = CardAdapter.to_consumable_format(card, card_idx, self.state)
+                        target_cards.append(consumable_card)
         
         # Apply consumable effect
         result = self.consumable_manager.use_consumable(
-            consumable_name, self.game_state, target_cards
+            consumable_name, self.state.to_dict(), target_cards
         )
         
         reward = 0.0
         info = {'consumable_used': consumable_name}
         
         if result['success']:
-            self.consumables.pop(consumable_idx)
+            self.state.consumables.pop(consumable_idx)
             
             # Handle different effect types
             if result.get('money_gained', 0) > 0:
-                self.player.chips += result['money_gained']
+                self.state.money += result['money_gained']
                 reward += result['money_gained'] / 10.0
                 
             if result.get('planet_used'):
@@ -445,9 +697,18 @@ class BalatroEnv(gym.Env):
                 }
                 if result['planet_used'] in planet_map:
                     self.engine.apply_planet(planet_map[result['planet_used']])
+                    self.state.hand_levels[planet_map[result['planet_used']]] += 1
                     reward += 10.0
             
             if result.get('cards_affected'):
+                # Update card enhancements/editions/seals based on effects
+                for affected in result['cards_affected']:
+                    if hasattr(affected, 'index') and hasattr(affected, 'enhancement'):
+                        self.state.card_enhancements[affected.index] = affected.enhancement
+                    if hasattr(affected, 'index') and hasattr(affected, 'edition'):
+                        self.state.card_editions[affected.index] = affected.edition
+                    if hasattr(affected, 'index') and hasattr(affected, 'seal'):
+                        self.state.card_seals[affected.index] = affected.seal
                 reward += len(result['cards_affected']) * 2.0
                 
             if result.get('cards_created'):
@@ -457,30 +718,38 @@ class BalatroEnv(gym.Env):
                 reward += len(result['cards_destroyed']) * 1.0
                 
             if result.get('jokers_created'):
-                for joker in result['jokers_created']:
-                    if len(self.jokers) < self.joker_slots:
-                        self.jokers.append(joker)
+                for joker_name in result['jokers_created']:
+                    if len(self.state.jokers) < self.state.joker_slots:
+                        # Find joker info
+                        for joker_info in JOKER_LIBRARY:
+                            if joker_info.name == joker_name:
+                                self.state.jokers.append(joker_info)
+                                break
                 reward += len(result['jokers_created']) * 15.0
                 
             if result.get('items_created'):
                 for item in result['items_created']:
-                    if len(self.consumables) < self.consumable_slots:
-                        self.consumables.append(item)
+                    if len(self.state.consumables) < self.state.consumable_slots:
+                        self.state.consumables.append(item)
                 reward += len(result['items_created']) * 5.0
                 
             if result.get('hand_size_change'):
-                self.game.hand_size += result['hand_size_change']
+                self.state.hand_size += result['hand_size_change']
+                self.game.hand_size = self.state.hand_size
                 
             info['result'] = result['message']
         else:
             reward = -1.0
             info['error'] = result.get('message', 'Failed to use consumable')
         
-        self.selected_cards = []
+        self.state.selected_cards = []
         return reward, info
 
     def _step_shop(self, action: int):
         """Handle shop phase actions using the Shop module"""
+        if self.shop is None:
+            return self._get_observation(), -1.0, False, False, {'error': 'No shop available'}
+        
         info = {}
         
         # Map our action IDs to Shop action IDs
@@ -490,8 +759,8 @@ class BalatroEnv(gym.Env):
             shop_action = ShopAction.REROLL
         elif action in ACTION_SHOP_BUY:
             item_idx = action - 20
-            if item_idx >= len(self.shop.inventory):
-                return self._get_observation(), -1.0, False, False, {'error': 'Invalid item'}
+            if not (0 <= item_idx < len(self.shop.inventory)):
+                return self._get_observation(), -1.0, False, False, {'error': 'Invalid item index'}
             
             item = self.shop.inventory[item_idx]
             if item.item_type == ItemType.PACK:
@@ -506,29 +775,23 @@ class BalatroEnv(gym.Env):
                 return self._get_observation(), -1.0, False, False, {'error': 'Unknown item type'}
         elif action in ACTION_SELL_JOKER:
             joker_idx = action - 32
-            if joker_idx < len(self.jokers):
-                sold_joker_name = self.jokers.pop(joker_idx)
-                sold_joker_id = JOKER_NAME_TO_ID.get(sold_joker_name, 0)
+            if 0 <= joker_idx < len(self.state.jokers):
+                sold_joker = self.state.jokers.pop(joker_idx)
+                sell_value = max(3, sold_joker.base_cost // 2)
+                self.state.money += sell_value
+                self.state.jokers_sold += 1
                 
-                # Get sell value from JOKER_LIBRARY
-                sell_value = 3  # Default
-                for joker_info in JOKER_LIBRARY:
-                    if joker_info.id == sold_joker_id:
-                        sell_value = max(3, joker_info.base_cost // 2)
-                        break
+                # Sync with player state
+                self._sync_player_state()
                 
-                self.player.chips += sell_value
-                
-                # Remove from player's joker list too
-                if sold_joker_id in self.player.jokers:
-                    self.player.jokers.remove(sold_joker_id)
-                
-                self._update_game_state()
-                return self._get_observation(), sell_value / 5.0, False, False, {'sold_joker': sold_joker_name}
+                return self._get_observation(), sell_value / 5.0, False, False, {'sold_joker': sold_joker.name}
+            else:
+                return self._get_observation(), -1.0, False, False, {'error': 'Invalid joker index'}
         else:
             return self._get_observation(), -1.0, False, False, {'error': 'Invalid shop action'}
         
         # Execute shop action
+        self._sync_player_state()
         reward, done_shopping, shop_info = self.shop.step(shop_action)
         info.update(shop_info)
         
@@ -539,26 +802,28 @@ class BalatroEnv(gym.Env):
         elif 'error' not in shop_info and action in ACTION_SHOP_BUY:
             verb, _ = ShopAction.decode(shop_action)
             if verb == "buy_joker":
-                joker_id = self.player.jokers[-1]
-                joker_name = JOKER_ID_TO_NAME.get(joker_id, f"Unknown_Joker_{joker_id}")
-                if joker_name not in self.jokers:
-                    self.jokers.append(joker_name)
+                # Sync joker from player state
+                self._sync_jokers_from_player()
                 reward = 15.0
-                info['bought_joker'] = joker_name
             elif verb == "buy_card":
                 reward = 3.0
                 info['bought_card'] = True
             elif verb == "buy_voucher":
+                # Sync vouchers
+                self.state.vouchers = self.shop.player.vouchers.copy()
                 reward = 10.0
-                info['bought_voucher'] = self.player.vouchers[-1]
+                info['bought_voucher'] = self.state.vouchers[-1] if self.state.vouchers else None
+        
+        # Sync money
+        self.state.money = self.shop.player.chips
         
         # Check if shopping is done
         if done_shopping:
-            self.phase = Phase.PLAY
+            self.state.phase = Phase.PLAY
+            self._sync_state_to_game()
             self.game._draw_cards()
-            self._update_hand_array()
+            self._sync_state_from_game()
         
-        self._update_game_state()
         return self._get_observation(), reward, False, False, info
 
     def _step_blind_select(self, action: int):
@@ -568,84 +833,114 @@ class BalatroEnv(gym.Env):
         
         if action in ACTION_SELECT_BLIND:
             blind_type = action - 45  # 0=small, 1=big, 2=boss
-            self.round = blind_type + 1
+            self.state.round = blind_type + 1
             blind_key = ['small', 'big', 'boss'][blind_type]
-            self.chips_needed = BLIND_CHIPS[min(self.ante, 8)][blind_key]
+            self.state.chips_needed = BLIND_CHIPS[min(self.state.ante, 8)][blind_key]
             
             # Update game blind
-            self.game.blinds[self.game.blind_index] = self.chips_needed
+            self.game.blinds[self.game.blind_index] = self.state.chips_needed
             
             # Boss blind bonus reward
             if blind_type == 2:
                 reward = 10.0
             
             # Transition to play
-            self.phase = Phase.PLAY
-            self._update_hand_array()
+            self.state.phase = Phase.PLAY
+            self._sync_state_from_game()
             
         elif action == ACTION_SKIP_BLIND:
             # Skip blind - trigger skip effects
-            for joker_name in self.jokers:
-                joker = type('Joker', (), {'name': joker_name})
+            for joker in self.state.jokers:
                 self.joker_effects_engine.apply_joker_effect(
-                    joker, {'phase': 'skip_blind'}, self.game_state
+                    type('Joker', (), {'name': joker.name}), 
+                    {'phase': 'skip_blind'}, 
+                    self.state.to_dict()
                 )
             
             reward = -5.0
             self._advance_round()
             info['skipped_blind'] = True
         
-        self._update_game_state()
         return self._get_observation(), reward, False, False, info
 
     def _step_pack_open(self, action: int):
         """Handle pack opening - simplified for now"""
-        self.phase = Phase.SHOP
+        self.state.phase = Phase.SHOP
         self._generate_shop()
         return self._get_observation(), 0.0, False, False, {}
 
     def _advance_round(self):
         """Advance to next round/ante"""
         # Apply end-of-round effects
-        end_effects = self.joker_effects_engine.end_of_round_effects(self.game_state)
+        end_effects = self.joker_effects_engine.end_of_round_effects(self.state.to_dict())
         
         # Handle joker destruction
         for effect in end_effects:
             if 'destroy_joker' in effect:
                 joker_name = effect['destroy_joker']
-                if joker_name in self.jokers:
-                    self.jokers.remove(joker_name)
+                self.state.jokers = [j for j in self.state.jokers if j.name != joker_name]
         
         # Reset round stats
-        self.best_hand_this_ante = 0
-        self.hands_played_this_ante = 0
+        self.state.best_hand_this_ante = 0
+        self.state.hands_played_ante = 0
+        self.state.chips_scored = 0
         
         # Progress ante/round
-        if self.round == 3:
-            self.ante += 1
-            self.round = 1
+        if self.state.round == 3:
+            self.state.ante += 1
+            self.state.round = 1
         else:
-            self.round += 1
+            self.state.round += 1
         
         # Award money
-        money_earned = 25 * self.round + (10 if self.round == 3 else 0)
-        self.player.chips += money_earned
+        money_earned = 25 * self.state.round + (10 if self.state.round == 3 else 0)
+        self.state.money += money_earned
+        
+        # Reset hands/discards
+        self.state.hands_left = 4
+        self.state.discards_left = 3
         
         # Go to shop
-        self.phase = Phase.SHOP
+        self.state.phase = Phase.SHOP
         self._generate_shop()
 
     def _generate_shop(self):
         """Create shop with items using the Shop module"""
-        # Make sure player state is synced
-        self.player.jokers = [JOKER_NAME_TO_ID.get(name, 0) for name in self.jokers]
-        self.shop = Shop(self.ante, self.player, seed=int(np.random.randint(1<<31)))
+        # Sync player state first
+        self._sync_player_state()
+        
+        # Use shop RNG stream
+        shop_seed = self.rng.get_int('shop_generation', 0, 2**31 - 1)
+        self.shop = Shop(self.state.ante, self.shop.player if self.shop else self._create_player_state(), seed=shop_seed)
+        self.state.shop_inventory = self.shop.inventory.copy()
+        self.state.shop_reroll_cost = int(self.shop.reroll_cost * self.shop._cost_mult())
 
-    def _update_hand_array(self):
-        """Update hand array for observation"""
-        self.hand_array = np.full(8, -1, dtype=np.int8)
-        for i, idx in enumerate(self.game.hand_indexes[:8]):
-            self.hand_array[i] = self.game.deck[idx].encode()
+    def _create_player_state(self) -> PlayerState:
+        """Create player state from unified state"""
+        player = PlayerState(chips=self.state.money)
+        player.jokers = [j.id for j in self.state.jokers]
+        player.vouchers = self.state.vouchers.copy()
+        return player
+
+    def _sync_player_state(self):
+        """Sync player state with unified state"""
+        if self.shop and self.shop.player:
+            self.shop.player.chips = self.state.money
+            self.shop.player.jokers = [j.id for j in self.state.jokers]
+            self.shop.player.vouchers = self.state.vouchers.copy()
+
+    def _sync_jokers_from_player(self):
+        """Sync jokers from player state back to unified state"""
+        if self.shop and self.shop.player:
+            # Get new jokers that were added
+            current_joker_ids = {j.id for j in self.state.jokers}
+            for joker_id in self.shop.player.jokers:
+                if joker_id not in current_joker_ids:
+                    # Find joker info and add it
+                    for joker_info in JOKER_LIBRARY:
+                        if joker_info.id == joker_id:
+                            self.state.jokers.append(joker_info)
+                            break
 
     def _is_valid_action(self, action: int) -> bool:
         """Check if action is valid"""
@@ -656,42 +951,42 @@ class BalatroEnv(gym.Env):
         """Get valid actions for current state"""
         mask = np.zeros(ACTION_SPACE_SIZE, dtype=np.int8)
         
-        if self.phase == Phase.PLAY:
+        if self.state.phase == Phase.PLAY:
             # Card selection
-            for i in range(min(8, len(self.game.hand_indexes))):
+            for i in range(min(8, len(self.state.hand_indexes))):
                 mask[2 + i] = 1
             
             # Play hand if cards selected
-            if len(self.selected_cards) > 0:
+            if len(self.state.selected_cards) > 0:
                 mask[ACTION_PLAY_HAND] = 1
             
             # Discard if cards selected and discards left
-            if len(self.selected_cards) > 0 and self.game.round_discards > 0:
+            if len(self.state.selected_cards) > 0 and self.state.discards_left > 0:
                 mask[ACTION_DISCARD] = 1
             
             # Use consumables
-            for i in range(len(self.consumables)):
+            for i in range(len(self.state.consumables)):
                 mask[10 + i] = 1
                 
-        elif self.phase == Phase.SHOP:
+        elif self.state.phase == Phase.SHOP:
             if self.shop:
                 # Buy items
                 for i in range(len(self.shop.inventory)):
-                    if self.player.chips >= self.shop.inventory[i].cost:
+                    if self.state.money >= self.shop.inventory[i].cost:
                         mask[20 + i] = 1
                 
                 # Reroll
-                if self.player.chips >= int(self.shop.reroll_cost * self.shop._cost_mult()):
+                if self.state.money >= self.state.shop_reroll_cost:
                     mask[ACTION_SHOP_REROLL] = 1
             
             # Always can end shop
             mask[ACTION_SHOP_END] = 1
             
             # Sell jokers
-            for i in range(len(self.jokers)):
+            for i in range(len(self.state.jokers)):
                 mask[32 + i] = 1
                 
-        elif self.phase == Phase.BLIND_SELECT:
+        elif self.state.phase == Phase.BLIND_SELECT:
             # Select any blind
             mask[45:48] = 1
             mask[ACTION_SKIP_BLIND] = 1
@@ -700,56 +995,62 @@ class BalatroEnv(gym.Env):
 
     def _get_observation(self):
         """Build observation dict"""
-        # Get hand levels from engine
+        # Build hand array
+        hand_array = np.full(8, -1, dtype=np.int8)
+        for i, idx in enumerate(self.state.hand_indexes[:8]):
+            if idx < len(self.state.deck):
+                hand_array[i] = CardAdapter.encode_to_int(self.state.deck[idx])
+        
+        # Get hand levels
         hand_levels = []
         for hand_type in HandType:
             if hand_type != HandType.NONE:
-                level = self.engine.get_hand_level(hand_type)
+                level = self.state.hand_levels.get(hand_type, 0)
                 hand_levels.append(level)
         
         # Get consumable IDs
         consumable_ids = self._get_consumable_ids()
         
         obs = {
-            'hand': self.hand_array.copy(),
-            'hand_size': np.int8(len(self.game.hand_indexes)),
-            'deck_size': np.int8(sum(not c.played for c in self.game.deck)),
-            'selected_cards': np.array([1 if i in self.selected_cards else 0 for i in range(8)]),
+            'hand': hand_array,
+            'hand_size': np.int8(len(self.state.hand_indexes)),
+            'deck_size': np.int8(sum(1 for _ in self.state.deck)),  # All cards in new system
+            'selected_cards': np.array([1 if i in self.state.selected_cards else 0 for i in range(8)]),
             
-            'chips_scored': np.int32(self.game.round_score),
+            'chips_scored': np.int32(self.state.chips_scored),
             'mult': np.int32(1),  # Base mult
-            'chips_needed': np.int32(self.chips_needed),
-            'money': np.int32(self.player.chips),
+            'chips_needed': np.int32(self.state.chips_needed),
+            'money': np.int32(self.state.money),
             
-            'ante': np.int8(self.ante),
-            'round': np.int8(self.round),
-            'hands_left': np.int8(self.game.round_hands),
-            'discards_left': np.int8(self.game.round_discards),
+            'ante': np.int8(self.state.ante),
+            'round': np.int8(self.state.round),
+            'hands_left': np.int8(self.state.hands_left),
+            'discards_left': np.int8(self.state.discards_left),
             
-            'joker_count': np.int8(len(self.jokers)),
-            'joker_ids': np.array([JOKER_NAME_TO_ID.get(j, 0) for j in self.jokers] + 
-                                 [0] * (10 - len(self.jokers)), dtype=np.int16),
-            'joker_slots': np.int8(self.joker_slots),
+            'joker_count': np.int8(len(self.state.jokers)),
+            'joker_ids': np.array([j.id for j in self.state.jokers] + 
+                                 [0] * (10 - len(self.state.jokers)), dtype=np.int16),
+            'joker_slots': np.int8(self.state.joker_slots),
             
-            'consumable_count': np.int8(len(self.consumables)),
+            'consumable_count': np.int8(len(self.state.consumables)),
             'consumables': np.array(consumable_ids, dtype=np.int16),
-            'consumable_slots': np.int8(self.consumable_slots),
+            'consumable_slots': np.int8(self.state.consumable_slots),
             
             'shop_items': np.zeros(10, dtype=np.int16),
             'shop_costs': np.zeros(10, dtype=np.int16),
-            'shop_rerolls': np.int16(self.shop.reroll_cost if self.phase == Phase.SHOP and self.shop else 0),
+            'shop_rerolls': np.int16(self.state.shop_reroll_cost),
             
             'hand_levels': np.array(hand_levels[:12], dtype=np.int8),
             
-            'phase': np.int8(self.phase),
+            'phase': np.int8(self.state.phase),
             'action_mask': self._get_action_mask(),
             
-            'hands_played': np.int16(self.total_hands_played),
-            'best_hand_this_ante': np.int32(self.best_hand_this_ante),
+            'hands_played': np.int16(self.state.hands_played_total),
+            'best_hand_this_ante': np.int32(self.state.best_hand_this_ante),
         }
         
         # Add shop info if in shop
-        if self.phase == Phase.SHOP and self.shop:
+        if self.state.phase == Phase.SHOP and self.shop:
             shop_obs = self.shop.get_observation()
             for i, (item_type, cost) in enumerate(zip(shop_obs['shop_item_type'][:10], 
                                                       shop_obs['shop_cost'][:10])):
@@ -785,10 +1086,43 @@ class BalatroEnv(gym.Env):
         }
         
         ids = []
-        for consumable in self.consumables:
+        for consumable in self.state.consumables:
             ids.append(consumable_id_map.get(consumable, 0))
         
         return ids + [0] * (5 - len(ids))
+
+    def save_state(self) -> Dict[str, Any]:
+        """Save complete environment state for checkpointing"""
+        return {
+            'state': self.state.copy(),
+            'rng_state': self.rng.get_state(),
+            'engine_state': {
+                'hand_levels': self.engine.hand_levels.copy(),
+                'hand_play_counts': self.engine.hand_play_counts.copy(),
+            },
+            'game_state': {
+                'deck': self.game.deck.copy(),
+                'state': self.game.state,
+                'blind_index': self.game.blind_index,
+            }
+        }
+    
+    def load_state(self, saved_state: Dict[str, Any]) -> None:
+        """Load complete environment state from checkpoint"""
+        self.state = saved_state['state'].copy()
+        self.rng.set_state(saved_state['rng_state'])
+        
+        # Restore engine state
+        self.engine.hand_levels = saved_state['engine_state']['hand_levels'].copy()
+        self.engine.hand_play_counts = saved_state['engine_state']['hand_play_counts'].copy()
+        
+        # Restore game state
+        self.game.deck = saved_state['game_state']['deck'].copy()
+        self.game.state = saved_state['game_state']['state']
+        self.game.blind_index = saved_state['game_state']['blind_index']
+        
+        # Sync states
+        self._sync_state_from_game()
 
     def render(self):
         """Render the game state"""
@@ -796,37 +1130,107 @@ class BalatroEnv(gym.Env):
             return
         
         print(f"\n{'='*50}")
-        print(f"Ante {self.ante} - Round {self.round} - Phase: {Phase(self.phase).name}")
-        print(f"Score: {self.game.round_score}/{self.chips_needed} | Money: ${self.player.chips}")
-        print(f"Hands: {self.game.round_hands} | Discards: {self.game.round_discards}")
+        print(f"Ante {self.state.ante} - Round {self.state.round} - Phase: {Phase(self.state.phase).name}")
+        print(f"Score: {self.state.chips_scored}/{self.state.chips_needed} | Money: ${self.state.money}")
+        print(f"Hands: {self.state.hands_left} | Discards: {self.state.discards_left}")
         
-        if self.phase == Phase.PLAY:
-            print(f"\nHand: {self.game.hand_to_string()}")
-            if self.selected_cards:
-                print(f"Selected: {self.selected_cards}")
+        if self.state.phase == Phase.PLAY:
+            print(f"\nHand: {self.game.hand_to_string() if self.game else 'N/A'}")
+            if self.state.selected_cards:
+                print(f"Selected: {self.state.selected_cards}")
         
-        elif self.phase == Phase.SHOP and self.shop:
+        elif self.state.phase == Phase.SHOP and self.shop:
             print("\n=== SHOP ===")
             for i, item in enumerate(self.shop.inventory):
-                affordable = "✓" if self.player.chips >= item.cost else "✗"
+                affordable = "✓" if self.state.money >= item.cost else "✗"
                 print(f"[{i}] {affordable} {item.name:<25} ${item.cost}")
-            print(f"\nReroll cost: ${int(self.shop.reroll_cost * self.shop._cost_mult())}")
+            print(f"\nReroll cost: ${self.state.shop_reroll_cost}")
         
-        elif self.phase == Phase.BLIND_SELECT:
+        elif self.state.phase == Phase.BLIND_SELECT:
             print("\n=== SELECT BLIND ===")
-            print(f"[0] Small Blind: {BLIND_CHIPS[min(self.ante, 8)]['small']} chips")
-            print(f"[1] Big Blind: {BLIND_CHIPS[min(self.ante, 8)]['big']} chips")
-            print(f"[2] Boss Blind: {BLIND_CHIPS[min(self.ante, 8)]['boss']} chips")
+            print(f"[0] Small Blind: {BLIND_CHIPS[min(self.state.ante, 8)]['small']} chips")
+            print(f"[1] Big Blind: {BLIND_CHIPS[min(self.state.ante, 8)]['big']} chips")
+            print(f"[2] Boss Blind: {BLIND_CHIPS[min(self.state.ante, 8)]['boss']} chips")
             print(f"[S] Skip Blind")
         
-        if self.jokers:
-            print(f"\nJokers ({len(self.jokers)}/{self.joker_slots}): {', '.join(self.jokers)}")
+        if self.state.jokers:
+            print(f"\nJokers ({len(self.state.jokers)}/{self.state.joker_slots}): {', '.join(j.name for j in self.state.jokers)}")
         
-        if self.consumables:
-            print(f"Consumables ({len(self.consumables)}/{self.consumable_slots}): {', '.join(self.consumables)}")
+        if self.state.consumables:
+            print(f"Consumables ({len(self.state.consumables)}/{self.state.consumable_slots}): {', '.join(self.state.consumables)}")
 
     def close(self):
         pass
+
+
+# ---------------------------------------------------------------------------
+# Environment Validator for Testing
+# ---------------------------------------------------------------------------
+
+class BalatroEnvValidator:
+    """Validate environment behavior matches Balatro"""
+    
+    @staticmethod
+    def validate_determinism(env_class, seed: int = 42, steps: int = 100):
+        """Check if environment is deterministic with same seed"""
+        env1 = env_class(seed=seed)
+        env2 = env_class(seed=seed)
+        
+        obs1, _ = env1.reset()
+        obs2, _ = env2.reset()
+        
+        # Check initial observations match
+        for key in obs1:
+            if not np.array_equal(obs1[key], obs2[key]):
+                raise AssertionError(f"Initial observations differ for key: {key}")
+        
+        # Run same actions
+        for i in range(steps):
+            # Get valid action
+            valid_actions = np.where(obs1['action_mask'])[0]
+            if len(valid_actions) == 0:
+                break
+            
+            action = valid_actions[i % len(valid_actions)]
+            
+            obs1, r1, t1, tr1, info1 = env1.step(action)
+            obs2, r2, t2, tr2, info2 = env2.step(action)
+            
+            # Check all outputs match
+            if r1 != r2:
+                raise AssertionError(f"Rewards differ at step {i}: {r1} vs {r2}")
+            
+            if t1 != t2 or tr1 != tr2:
+                raise AssertionError(f"Termination differs at step {i}")
+            
+            for key in obs1:
+                if not np.array_equal(obs1[key], obs2[key]):
+                    raise AssertionError(f"Observations differ at step {i} for key: {key}")
+        
+        print(f"✓ Determinism validated over {steps} steps")
+    
+    @staticmethod
+    def validate_action_masking(env):
+        """Check that invalid actions are properly masked"""
+        obs, _ = env.reset()
+        
+        # Try all actions
+        for action in range(env.action_space.n):
+            if obs['action_mask'][action]:
+                # Should succeed
+                _, _, _, _, info = env.step(action)
+                if 'error' in info and info['error'] == 'Invalid action':
+                    raise AssertionError(f"Valid action {action} was rejected")
+            else:
+                # Should fail
+                obs_before = obs.copy()
+                _, reward, _, _, info = env.step(action)
+                if 'error' not in info:
+                    raise AssertionError(f"Invalid action {action} was accepted")
+                if reward != -1.0:
+                    raise AssertionError(f"Invalid action {action} gave reward {reward}")
+        
+        print("✓ Action masking validated")
 
 
 # ---------------------------------------------------------------------------
@@ -846,7 +1250,14 @@ def make_balatro_env(**kwargs):
 
 if __name__ == "__main__":
     # Test the complete environment
-    env = BalatroEnv(render_mode="human")
+    env = BalatroEnv(render_mode="human", seed=42)
+    
+    # Validate determinism
+    print("Testing determinism...")
+    BalatroEnvValidator.validate_determinism(BalatroEnv, seed=42, steps=50)
+    
+    # Test basic gameplay
+    print("\nTesting basic gameplay...")
     obs, _ = env.reset()
     
     print("Complete Balatro Environment initialized!")
@@ -864,10 +1275,10 @@ if __name__ == "__main__":
         print(f"\nValid actions: {valid_actions}")
         
         # Simple policy for testing
-        if env.phase == Phase.BLIND_SELECT:
+        if env.state.phase == Phase.BLIND_SELECT:
             # Always select small blind
             action = 45
-        elif env.phase == Phase.SHOP:
+        elif env.state.phase == Phase.SHOP:
             # End shop immediately
             action = ACTION_SHOP_END
         else:
@@ -885,5 +1296,29 @@ if __name__ == "__main__":
         step += 1
     
     print(f"\nEpisode finished after {step} steps")
-    print(f"Final score: {env.game.round_score}")
-    print(f"Reached ante: {env.ante}")
+    print(f"Final score: {env.state.chips_scored}")
+    print(f"Reached ante: {env.state.ante}")
+    
+    # Test save/load
+    print("\nTesting save/load...")
+    saved = env.save_state()
+    
+    # Take some actions
+    for _ in range(5):
+        valid = np.where(env._get_action_mask())[0]
+        if len(valid) > 0:
+            env.step(np.random.choice(valid))
+    
+    # Save current observation
+    obs_after = env._get_observation()
+    
+    # Restore
+    env.load_state(saved)
+    obs_restored = env._get_observation()
+    
+    # Check they match
+    for key in obs_restored:
+        if not np.array_equal(obs_after[key], obs_restored[key]):
+            print(f"✓ State properly changed for key: {key}")
+    
+    print("✓ Save/load working correctly")
