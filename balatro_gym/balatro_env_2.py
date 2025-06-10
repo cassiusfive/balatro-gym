@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 from typing import Dict, Optional, List, Any, Tuple
-from enum import Enum, IntEnum
+from enum import Enum
 from dataclasses import dataclass, field
 import random
 import pickle
@@ -25,6 +25,9 @@ from gymnasium import spaces
 
 # Import card primitives first
 from balatro_gym.cards import Card, Suit, Rank
+
+# Import constants
+from balatro_gym.constants import Phase, Action
 
 # Import all game modules
 from balatro_gym.balatro_game_v2 import BalatroGame
@@ -38,40 +41,6 @@ from balatro_gym.consumables import (
 )
 from balatro_gym.unified_scoring import UnifiedScorer, ScoringContext
 from complete_joker_effects import CompleteJokerEffects
-
-# ---------------------------------------------------------------------------
-# Action Space Constants
-# ---------------------------------------------------------------------------
-
-# Playing phase actions
-ACTION_PLAY_HAND = 0
-ACTION_DISCARD = 1
-ACTION_SELECT_CARDS = range(2, 10)      # Select cards 0-7
-ACTION_USE_CONSUMABLE = range(10, 15)   # Use consumables 0-4
-
-# Shop phase actions  
-ACTION_SHOP_BUY = range(20, 30)         # Buy shop items 0-9
-ACTION_SHOP_REROLL = 30
-ACTION_SHOP_END = 31
-ACTION_SELL_JOKER = range(32, 37)      # Sell jokers 0-4
-ACTION_SELL_CONSUMABLE = range(37, 42)  # Sell consumables 0-4
-
-# Blind selection actions
-ACTION_SELECT_BLIND = range(45, 48)     # Select small/big/boss
-ACTION_SKIP_BLIND = 48
-
-# Pack opening actions
-ACTION_SELECT_FROM_PACK = range(50, 55) # Select from pack 0-4
-ACTION_SKIP_PACK = 55
-
-ACTION_SPACE_SIZE = 60
-
-# Game phases
-class Phase(IntEnum):
-    PLAY = 0
-    SHOP = 1
-    BLIND_SELECT = 2
-    PACK_OPEN = 3
 
 # Blind scaling
 BLIND_CHIPS = {
@@ -360,7 +329,7 @@ class BalatroEnv(gym.Env):
         self.rng = DeterministicRNG(seed)
         
         # Action and observation spaces
-        self.action_space = spaces.Discrete(ACTION_SPACE_SIZE)
+        self.action_space = spaces.Discrete(Action.ACTION_SPACE_SIZE)
         self.observation_space = self._create_observation_space()
         
         # Initialize state
@@ -418,7 +387,7 @@ class BalatroEnv(gym.Env):
             
             # Phase and action validity
             'phase': spaces.Box(0, 3, (), dtype=np.int8),
-            'action_mask': spaces.MultiBinary(ACTION_SPACE_SIZE),
+            'action_mask': spaces.MultiBinary(Action.ACTION_SPACE_SIZE),
             
             # Stats for reward shaping
             'hands_played': spaces.Box(0, 1000, (), dtype=np.int16),
@@ -508,7 +477,7 @@ class BalatroEnv(gym.Env):
         terminated = False
         info = {}
         
-        if action == ACTION_PLAY_HAND:
+        if action == Action.PLAY_HAND:
             if len(self.state.selected_cards) == 0:
                 return self._get_observation(), -1.0, False, False, {'error': 'No cards selected'}
             
@@ -584,7 +553,7 @@ class BalatroEnv(gym.Env):
                 self.game._draw_cards()
                 self._sync_state_from_game()
                 
-        elif action == ACTION_DISCARD:
+        elif action == Action.DISCARD:
             if self.state.discards_left <= 0:
                 return self._get_observation(), -1.0, False, False, {'error': 'No discards left'}
             
@@ -631,16 +600,17 @@ class BalatroEnv(gym.Env):
             self._sync_state_from_game()
             reward = 0.5
             
-        elif action in ACTION_SELECT_CARDS:
-            card_idx = action - 2
+        elif Action.SELECT_CARD_BASE <= action < Action.SELECT_CARD_BASE + Action.SELECT_CARD_COUNT:
+            card_idx = action - Action.SELECT_CARD_BASE
             if card_idx < len(self.state.hand_indexes):
                 if card_idx in self.state.selected_cards:
                     self.state.selected_cards.remove(card_idx)
                 else:
                     self.state.selected_cards.append(card_idx)
                     
-        elif action in ACTION_USE_CONSUMABLE:
-            reward, info = self._use_consumable(action - 10)
+        elif Action.USE_CONSUMABLE_BASE <= action < Action.USE_CONSUMABLE_BASE + Action.USE_CONSUMABLE_COUNT:
+            consumable_idx = action - Action.USE_CONSUMABLE_BASE
+            reward, info = self._use_consumable(consumable_idx)
         
         return self._get_observation(), reward, terminated, False, info
 
@@ -753,12 +723,12 @@ class BalatroEnv(gym.Env):
         info = {}
         
         # Map our action IDs to Shop action IDs
-        if action == ACTION_SHOP_END:
+        if action == Action.SHOP_END:
             shop_action = ShopAction.SKIP
-        elif action == ACTION_SHOP_REROLL:
+        elif action == Action.SHOP_REROLL:
             shop_action = ShopAction.REROLL
-        elif action in ACTION_SHOP_BUY:
-            item_idx = action - 20
+        elif Action.SHOP_BUY_BASE <= action < Action.SHOP_BUY_BASE + Action.SHOP_BUY_COUNT:
+            item_idx = action - Action.SHOP_BUY_BASE
             if not (0 <= item_idx < len(self.shop.inventory)):
                 return self._get_observation(), -1.0, False, False, {'error': 'Invalid item index'}
             
@@ -773,8 +743,8 @@ class BalatroEnv(gym.Env):
                 shop_action = ShopAction.BUY_VOUCHER_BASE + item_idx
             else:
                 return self._get_observation(), -1.0, False, False, {'error': 'Unknown item type'}
-        elif action in ACTION_SELL_JOKER:
-            joker_idx = action - 32
+        elif Action.SELL_JOKER_BASE <= action < Action.SELL_JOKER_BASE + Action.SELL_JOKER_COUNT:
+            joker_idx = action - Action.SELL_JOKER_BASE
             if 0 <= joker_idx < len(self.state.jokers):
                 sold_joker = self.state.jokers.pop(joker_idx)
                 sell_value = max(3, sold_joker.base_cost // 2)
@@ -799,7 +769,7 @@ class BalatroEnv(gym.Env):
         if 'new_cards' in shop_info:
             reward = 5.0
             info['opened_pack'] = True
-        elif 'error' not in shop_info and action in ACTION_SHOP_BUY:
+        elif 'error' not in shop_info and Action.SHOP_BUY_BASE <= action < Action.SHOP_BUY_BASE + Action.SHOP_BUY_COUNT:
             verb, _ = ShopAction.decode(shop_action)
             if verb == "buy_joker":
                 # Sync joker from player state
@@ -831,8 +801,8 @@ class BalatroEnv(gym.Env):
         reward = 0.0
         info = {}
         
-        if action in ACTION_SELECT_BLIND:
-            blind_type = action - 45  # 0=small, 1=big, 2=boss
+        if Action.SELECT_BLIND_BASE <= action < Action.SELECT_BLIND_BASE + Action.SELECT_BLIND_COUNT:
+            blind_type = action - Action.SELECT_BLIND_BASE  # 0=small, 1=big, 2=boss
             self.state.round = blind_type + 1
             blind_key = ['small', 'big', 'boss'][blind_type]
             self.state.chips_needed = BLIND_CHIPS[min(self.state.ante, 8)][blind_key]
@@ -848,7 +818,7 @@ class BalatroEnv(gym.Env):
             self.state.phase = Phase.PLAY
             self._sync_state_from_game()
             
-        elif action == ACTION_SKIP_BLIND:
+        elif action == Action.SKIP_BLIND:
             # Skip blind - trigger skip effects
             for joker in self.state.jokers:
                 self.joker_effects_engine.apply_joker_effect(
@@ -949,47 +919,48 @@ class BalatroEnv(gym.Env):
 
     def _get_action_mask(self):
         """Get valid actions for current state"""
-        mask = np.zeros(ACTION_SPACE_SIZE, dtype=np.int8)
+        mask = np.zeros(Action.ACTION_SPACE_SIZE, dtype=np.int8)
         
         if self.state.phase == Phase.PLAY:
             # Card selection
             for i in range(min(8, len(self.state.hand_indexes))):
-                mask[2 + i] = 1
+                mask[Action.SELECT_CARD_BASE + i] = 1
             
             # Play hand if cards selected
             if len(self.state.selected_cards) > 0:
-                mask[ACTION_PLAY_HAND] = 1
+                mask[Action.PLAY_HAND] = 1
             
             # Discard if cards selected and discards left
             if len(self.state.selected_cards) > 0 and self.state.discards_left > 0:
-                mask[ACTION_DISCARD] = 1
+                mask[Action.DISCARD] = 1
             
             # Use consumables
             for i in range(len(self.state.consumables)):
-                mask[10 + i] = 1
+                mask[Action.USE_CONSUMABLE_BASE + i] = 1
                 
         elif self.state.phase == Phase.SHOP:
             if self.shop:
                 # Buy items
                 for i in range(len(self.shop.inventory)):
                     if self.state.money >= self.shop.inventory[i].cost:
-                        mask[20 + i] = 1
+                        mask[Action.SHOP_BUY_BASE + i] = 1
                 
                 # Reroll
                 if self.state.money >= self.state.shop_reroll_cost:
-                    mask[ACTION_SHOP_REROLL] = 1
+                    mask[Action.SHOP_REROLL] = 1
             
             # Always can end shop
-            mask[ACTION_SHOP_END] = 1
+            mask[Action.SHOP_END] = 1
             
             # Sell jokers
             for i in range(len(self.state.jokers)):
-                mask[32 + i] = 1
+                mask[Action.SELL_JOKER_BASE + i] = 1
                 
         elif self.state.phase == Phase.BLIND_SELECT:
             # Select any blind
-            mask[45:48] = 1
-            mask[ACTION_SKIP_BLIND] = 1
+            for i in range(Action.SELECT_BLIND_COUNT):
+                mask[Action.SELECT_BLIND_BASE + i] = 1
+            mask[Action.SKIP_BLIND] = 1
         
         return mask
 
@@ -1277,10 +1248,10 @@ if __name__ == "__main__":
         # Simple policy for testing
         if env.state.phase == Phase.BLIND_SELECT:
             # Always select small blind
-            action = 45
+            action = Action.SELECT_BLIND_BASE
         elif env.state.phase == Phase.SHOP:
             # End shop immediately
-            action = ACTION_SHOP_END
+            action = Action.SHOP_END
         else:
             # Random valid action
             action = np.random.choice(valid_actions) if len(valid_actions) > 0 else 0
