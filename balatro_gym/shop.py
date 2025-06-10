@@ -189,7 +189,8 @@ class Shop:
 
         # apply purchase
         if verb == "buy_pack":
-            info["new_cards"] = self._open_pack(item.payload["pack_type"])
+            pack_type = item.payload.get("pack_type", item.name)
+            info["new_cards"] = self._open_pack(pack_type)
         elif verb == "buy_card":
             self.player.deck.append(item.payload["card"])
         elif verb == "buy_joker":
