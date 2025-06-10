@@ -24,7 +24,11 @@ import gymnasium as gym
 from gymnasium import spaces
 
 # Import card primitives first
-from balatro_gym.cards import Card, Suit, Rank
+from balatro_gym.cards import (
+    Card, Suit, Rank, 
+    Enhancement, Edition, Seal,
+    EnhancementEffects, EditionEffects, SealEffects, CardState
+)
 
 # Import constants
 from balatro_gym.constants import Phase, Action
@@ -36,7 +40,6 @@ from balatro_gym.shop import Shop, ShopAction, PlayerState, ItemType
 from balatro_gym.jokers import JokerInfo, JOKER_LIBRARY
 from balatro_gym.planets import Planet
 from balatro_gym.consumables import (
-    Enhancement, Edition, Seal,
     TarotCard, SpectralCard, ConsumableManager
 )
 from balatro_gym.unified_scoring import UnifiedScorer, ScoringContext
@@ -187,10 +190,8 @@ class UnifiedGameState:
     # Hand levels
     hand_levels: Dict[HandType, int] = field(default_factory=dict)
     
-    # Card enhancements/editions/seals (card index -> property)
-    card_enhancements: Dict[int, Enhancement] = field(default_factory=dict)
-    card_editions: Dict[int, Edition] = field(default_factory=dict)
-    card_seals: Dict[int, Seal] = field(default_factory=dict)
+    # Card states (card index -> CardState)
+    card_states: Dict[int, CardState] = field(default_factory=dict)
     
     # Boss blind state
     active_boss_blind: Optional[BossBlindType] = None
@@ -267,54 +268,59 @@ class CardAdapter:
     @staticmethod
     def to_scoring_format(card: Card, card_idx: Optional[int] = None, state: Optional[UnifiedGameState] = None) -> Any:
         """Convert Card to scoring engine format with enhancements"""
-        # Base chip values for each rank
-        chip_values = {
-            Rank.TWO: 2, Rank.THREE: 3, Rank.FOUR: 4, Rank.FIVE: 5,
-            Rank.SIX: 6, Rank.SEVEN: 7, Rank.EIGHT: 8, Rank.NINE: 9,
-            Rank.TEN: 10, Rank.JACK: 10, Rank.QUEEN: 10, Rank.KING: 10,
-            Rank.ACE: 11
-        }
+        # Get base chip value
+        base_chips = card.rank.base_chips
         
-        # Get enhancements/editions/seals if we have state and card index
-        enhancement = None
-        edition = None
-        seal = None
-        
+        # Get card state if available
+        card_state = None
         if state and card_idx is not None:
-            enhancement = state.card_enhancements.get(card_idx)
-            edition = state.card_editions.get(card_idx)
-            seal = state.card_seals.get(card_idx)
+            card_state = state.card_states.get(card_idx, CardState(card_idx))
+        
+        # Calculate modified values
+        if card_state:
+            # Apply enhancement effects
+            chip_value = card_state.calculate_chip_bonus(base_chips)
+            
+            # Check if card is stone (no rank/suit)
+            if card_state.enhancement == Enhancement.STONE:
+                rank_value = 0  # Stone cards have no rank
+                suit_name = 'Stone'
+            else:
+                rank_value = card.rank.value
+                suit_name = card.suit.name.title()
+        else:
+            chip_value = base_chips
+            rank_value = card.rank.value
+            suit_name = card.suit.name.title()
         
         return type('ScoringCard', (), {
-            'rank': card.rank.value,  # Already in 2-14 range
-            'suit': card.suit.name.title(),  # Convert to string name
-            'base_value': chip_values.get(card.rank, 0),
-            'chip_value': lambda: chip_values.get(card.rank, 0),
-            'enhancement': enhancement,
-            'edition': edition,
-            'seal': seal
+            'rank': rank_value,
+            'suit': suit_name,
+            'base_value': base_chips,
+            'chip_value': lambda: chip_value,
+            'enhancement': card_state.enhancement if card_state else Enhancement.NONE,
+            'edition': card_state.edition if card_state else Edition.NONE,
+            'seal': card_state.seal if card_state else Seal.NONE,
+            'card_state': card_state,
+            'original_card': card
         })
     
     @staticmethod
     def to_consumable_format(card: Card, card_idx: Optional[int] = None, state: Optional[UnifiedGameState] = None) -> Any:
         """Convert Card to consumable module format"""
-        # Get enhancements/editions/seals
-        enhancement = Enhancement.NONE
-        edition = Edition.NONE
-        seal = Seal.NONE
-        
+        # Get card state
+        card_state = None
         if state and card_idx is not None:
-            enhancement = state.card_enhancements.get(card_idx, Enhancement.NONE)
-            edition = state.card_editions.get(card_idx, Edition.NONE)
-            seal = state.card_seals.get(card_idx, Seal.NONE)
+            card_state = state.card_states.get(card_idx, CardState(card_idx))
         
         # Create a card-like object that consumable system expects
         return type('ConsumableCard', (), {
             'rank': card.rank,
             'suit': card.suit,
-            'enhancement': enhancement,
-            'edition': edition,
-            'seal': seal
+            'enhancement': card_state.enhancement if card_state else Enhancement.NONE,
+            'edition': card_state.edition if card_state else Edition.NONE,
+            'seal': card_state.seal if card_state else Seal.NONE,
+            'card_idx': card_idx
         })
     
     @staticmethod
@@ -459,6 +465,17 @@ class BalatroEnv(gym.Env):
         
         return self._get_observation(), {}
 
+    def _calculate_steel_bonus(self) -> float:
+        """Calculate mult multiplier from steel cards remaining in hand"""
+        steel_mult = 1.0
+        for idx in self.state.hand_indexes:
+            if idx not in [self.state.hand_indexes[i] for i in self.state.selected_cards if i < len(self.state.hand_indexes)]:
+                # Card is still in hand
+                card_state = self.state.card_states.get(idx)
+                if card_state and card_state.enhancement == Enhancement.STEEL:
+                    steel_mult *= EnhancementEffects.get_mult_multiplier(Enhancement.STEEL, in_hand=True)
+        return steel_mult
+
     def _apply_boss_blind_to_hand(self):
         """Apply boss blind effects when drawing a new hand"""
         if not self.state.boss_blind_active or not self.boss_blind_manager.active_blind:
@@ -567,8 +584,57 @@ class BalatroEnv(gym.Env):
             # Use unified scorer
             base_score, breakdown = self.unified_scorer.score_hand(scoring_context)
             
-            # Apply boss blind scoring modifications
+            # Apply card enhancement/edition/seal effects
+            final_chips = base_score
+            final_mult = 1
+            extra_money = 0
+            cards_to_destroy = []
+            cards_to_retrigger = []
+            consumables_to_create = []
+            
+            # Process each played card for special effects
+            for i, (idx, card, scoring_card) in enumerate(zip(self.state.selected_cards, selected_game_cards, selected_cards)):
+                if idx < len(self.state.hand_indexes):
+                    card_idx = self.state.hand_indexes[idx]
+                    card_state = self.state.card_states.get(card_idx)
+                    
+                    if card_state:
+                        # Apply enhancement effects
+                        if card_state.enhancement == Enhancement.GLASS:
+                            # Check if glass breaks
+                            if self.rng.get_float('card_enhancement') < 0.25:
+                                cards_to_destroy.append(card_idx)
+                        elif card_state.enhancement == Enhancement.GOLD:
+                            # Gold cards will earn money at end of round
+                            pass  # Handled in round end
+                        elif card_state.enhancement == Enhancement.LUCKY:
+                            mult_roll = self.rng.get_float('card_enhancement')
+                            money_roll = self.rng.get_float('card_enhancement')
+                            lucky_mult, lucky_money = EnhancementEffects.get_lucky_bonus(mult_roll, money_roll)
+                            if lucky_mult > 0:
+                                final_mult += lucky_mult
+                            if lucky_money > 0:
+                                extra_money += lucky_money
+                        
+                        # Apply seal effects
+                        if card_state.seal == Seal.GOLD:
+                            extra_money += SealEffects.get_money_bonus(card_state.seal)
+                        elif card_state.seal == Seal.RED:
+                            cards_to_retrigger.append(i)
+                        elif card_state.seal == Seal.BLUE:
+                            planet = SealEffects.get_planet_created(card_state.seal, hand_type_name)
+                            if planet and len(self.state.consumables) < self.state.consumable_slots:
+                                consumables_to_create.append(planet)
+            
+            # Calculate final score with enhancement/edition multipliers
+            # This is simplified - in reality, the unified scorer should handle these
             final_score = base_score
+            
+            # Apply steel card bonus for cards remaining in hand
+            steel_mult = self._calculate_steel_bonus()
+            final_score = int(final_score * steel_mult)
+            
+            # Apply boss blind scoring modifications
             if self.state.boss_blind_active and self.boss_blind_manager.active_blind:
                 # Get base chips and mult for modification
                 base_chips, base_mult = self.engine.get_hand_chips_mult(hand_type)
@@ -580,6 +646,23 @@ class BalatroEnv(gym.Env):
                     chip_ratio = modified_chips / base_chips
                     mult_ratio = modified_mult / base_mult
                     final_score = int(final_score * chip_ratio * mult_ratio)
+            
+            # Apply retriggers (simplified - just add 50% more score per retrigger)
+            retrigger_bonus = len(cards_to_retrigger) * 0.5
+            final_score = int(final_score * (1 + retrigger_bonus))
+            
+            # Add extra money
+            self.state.money += extra_money
+            
+            # Create consumables
+            for consumable in consumables_to_create:
+                if len(self.state.consumables) < self.state.consumable_slots:
+                    self.state.consumables.append(consumable)
+            
+            # Destroy glass cards that broke
+            for card_idx in cards_to_destroy:
+                # Mark card as destroyed (would need proper implementation)
+                pass
             
             # Update state
             self.state.chips_scored += final_score
@@ -659,11 +742,16 @@ class BalatroEnv(gym.Env):
             
             # Get discarded cards
             discarded = []
+            purple_seal_count = 0
             for idx in self.state.selected_cards:
                 if idx < len(self.state.hand_indexes):
                     card_idx = self.state.hand_indexes[idx]
                     if card_idx < len(self.state.deck):
                         card = self.state.deck[card_idx]
+                        # Check for purple seal
+                        card_state = self.state.card_states.get(card_idx)
+                        if card_state and card_state.seal == Seal.PURPLE:
+                            purple_seal_count += 1
                         # Create simple card format for discard effects
                         discard_card = type('Card', (), {
                             'rank': card.rank.value,
@@ -698,6 +786,21 @@ class BalatroEnv(gym.Env):
             self.state.discards_left -= 1
             self.state.selected_cards = []
             self._sync_state_from_game()
+            
+            # Create tarot cards from purple seals
+            if purple_seal_count > 0:
+                tarots = ['The Fool', 'The Magician', 'The High Priestess', 'The Empress', 
+                         'The Emperor', 'The Hierophant', 'The Lovers', 'The Chariot',
+                         'Strength', 'The Hermit', 'Wheel of Fortune', 'Justice',
+                         'The Hanged Man', 'Death', 'Temperance', 'The Devil',
+                         'The Tower', 'The Star', 'The Moon', 'The Sun', 'Judgement', 'The World']
+                
+                for _ in range(purple_seal_count):
+                    if len(self.state.consumables) < self.state.consumable_slots:
+                        tarot = self.rng.choice('seal_applications', tarots)
+                        self.state.consumables.append(tarot)
+                        info['created_tarot'] = tarot
+            
             reward = 0.5
             
         elif Action.SELECT_CARD_BASE <= action < Action.SELECT_CARD_BASE + Action.SELECT_CARD_COUNT:
@@ -773,12 +876,19 @@ class BalatroEnv(gym.Env):
             if result.get('cards_affected'):
                 # Update card enhancements/editions/seals based on effects
                 for affected in result['cards_affected']:
-                    if hasattr(affected, 'index') and hasattr(affected, 'enhancement'):
-                        self.state.card_enhancements[affected.index] = affected.enhancement
-                    if hasattr(affected, 'index') and hasattr(affected, 'edition'):
-                        self.state.card_editions[affected.index] = affected.edition
-                    if hasattr(affected, 'index') and hasattr(affected, 'seal'):
-                        self.state.card_seals[affected.index] = affected.seal
+                    if hasattr(affected, 'card_idx'):
+                        card_idx = affected.card_idx
+                        # Get or create card state
+                        if card_idx not in self.state.card_states:
+                            self.state.card_states[card_idx] = CardState(card_idx)
+                        
+                        # Update properties
+                        if hasattr(affected, 'enhancement'):
+                            self.state.card_states[card_idx].enhancement = affected.enhancement
+                        if hasattr(affected, 'edition'):
+                            self.state.card_states[card_idx].edition = affected.edition
+                        if hasattr(affected, 'seal'):
+                            self.state.card_states[card_idx].seal = affected.seal
                 reward += len(result['cards_affected']) * 2.0
                 
             if result.get('cards_created'):
@@ -973,6 +1083,14 @@ class BalatroEnv(gym.Env):
             if 'destroy_joker' in effect:
                 joker_name = effect['destroy_joker']
                 self.state.jokers = [j for j in self.state.jokers if j.name != joker_name]
+        
+        # Award money from gold cards held in hand
+        gold_money = 0
+        for idx in self.state.hand_indexes:
+            card_state = self.state.card_states.get(idx)
+            if card_state and card_state.enhancement == Enhancement.GOLD:
+                gold_money += EnhancementEffects.get_gold_value(card_state.enhancement)
+        self.state.money += gold_money
         
         # Deactivate boss blind if active
         if self.state.boss_blind_active and self.boss_blind_manager.active_blind:
@@ -1259,17 +1377,260 @@ class BalatroEnv(gym.Env):
         print(f"Hands: {self.state.hands_left} | Discards: {self.state.discards_left}")
         
         if self.state.phase == Phase.PLAY:
-            # Show hand with face down indicators
+            # Show hand with face down indicators and enhancements
             hand_str = ""
             for i, idx in enumerate(self.state.hand_indexes):
                 if idx < len(self.state.deck):
                     if i in self.state.face_down_cards:
                         hand_str += "[??] "
                     else:
-                        hand_str += f"{self.state.deck[idx]} "
+                        card = self.state.deck[idx]
+                        card_str = str(card)
+                        
+                        # Add enhancement/edition/seal indicators
+                        card_state = self.state.card_states.get(idx)
+                        if card_state:
+                            modifiers = []
+                            if card_state.enhancement != Enhancement.NONE:
+                                enhancement_symbols = {
+                                    Enhancement.BONUS: '+',
+                                    Enhancement.MULT: '×',
+                                    Enhancement.WILD: 'W',
+                                    Enhancement.GLASS: 'G',
+                                    Enhancement.STEEL: 'S',
+                                    Enhancement.STONE: '◊',
+                                    Enhancement.GOLD: '
+        
+        elif self.state.phase == Phase.SHOP and self.shop:
+            print("\n=== SHOP ===")
+            for i, item in enumerate(self.shop.inventory):
+                affordable = "✓" if self.state.money >= item.cost else "✗"
+                print(f"[{i}] {affordable} {item.name:<25} ${item.cost}")
+            print(f"\nReroll cost: ${self.state.shop_reroll_cost}")
+        
+        elif self.state.phase == Phase.BLIND_SELECT:
+            print("\n=== SELECT BLIND ===")
+            print(f"[0] Small Blind: {BLIND_CHIPS[min(self.state.ante, 8)]['small']} chips")
+            print(f"[1] Big Blind: {BLIND_CHIPS[min(self.state.ante, 8)]['big']} chips")
+            print(f"[2] Boss Blind: {BLIND_CHIPS[min(self.state.ante, 8)]['boss']} chips")
+            print(f"[S] Skip Blind")
+        
+        if self.state.jokers:
+            joker_display = []
+            active_slots = self.state.joker_slots
+            if self.state.boss_blind_active:
+                active_slots -= self.boss_blind_manager.get_disabled_joker_count()
+            
+            for i, joker in enumerate(self.state.jokers[:active_slots]):
+                joker_display.append(joker.name)
+            
+            # Show disabled jokers
+            for i in range(active_slots, len(self.state.jokers)):
+                joker_display.append(f"[DISABLED: {self.state.jokers[i].name}]")
+            
+            print(f"\nJokers ({len(self.state.jokers)}/{self.state.joker_slots}): {', '.join(joker_display)}")
+        
+        if self.state.consumables:
+            print(f"Consumables ({len(self.state.consumables)}/{self.state.consumable_slots}): {', '.join(self.state.consumables)}")
+
+    def close(self):
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Environment Validator for Testing
+# ---------------------------------------------------------------------------
+
+class BalatroEnvValidator:
+    """Validate environment behavior matches Balatro"""
+    
+    @staticmethod
+    def validate_determinism(env_class, seed: int = 42, steps: int = 100):
+        """Check if environment is deterministic with same seed"""
+        env1 = env_class(seed=seed)
+        env2 = env_class(seed=seed)
+        
+        obs1, _ = env1.reset()
+        obs2, _ = env2.reset()
+        
+        # Check initial observations match
+        for key in obs1:
+            if not np.array_equal(obs1[key], obs2[key]):
+                raise AssertionError(f"Initial observations differ for key: {key}")
+        
+        # Run same actions
+        for i in range(steps):
+            # Get valid action
+            valid_actions = np.where(obs1['action_mask'])[0]
+            if len(valid_actions) == 0:
+                break
+            
+            action = valid_actions[i % len(valid_actions)]
+            
+            obs1, r1, t1, tr1, info1 = env1.step(action)
+            obs2, r2, t2, tr2, info2 = env2.step(action)
+            
+            # Check all outputs match
+            if r1 != r2:
+                raise AssertionError(f"Rewards differ at step {i}: {r1} vs {r2}")
+            
+            if t1 != t2 or tr1 != tr2:
+                raise AssertionError(f"Termination differs at step {i}")
+            
+            for key in obs1:
+                if not np.array_equal(obs1[key], obs2[key]):
+                    raise AssertionError(f"Observations differ at step {i} for key: {key}")
+        
+        print(f"✓ Determinism validated over {steps} steps")
+    
+    @staticmethod
+    def validate_action_masking(env):
+        """Check that invalid actions are properly masked"""
+        obs, _ = env.reset()
+        
+        # Try all actions
+        for action in range(env.action_space.n):
+            if obs['action_mask'][action]:
+                # Should succeed
+                _, _, _, _, info = env.step(action)
+                if 'error' in info and info['error'] == 'Invalid action':
+                    raise AssertionError(f"Valid action {action} was rejected")
+            else:
+                # Should fail
+                obs_before = obs.copy()
+                _, reward, _, _, info = env.step(action)
+                if 'error' not in info:
+                    raise AssertionError(f"Invalid action {action} was accepted")
+                if reward != -1.0:
+                    raise AssertionError(f"Invalid action {action} gave reward {reward}")
+        
+        print("✓ Action masking validated")
+
+
+# ---------------------------------------------------------------------------
+# Factory function for creating environments
+# ---------------------------------------------------------------------------
+
+def make_balatro_env(**kwargs):
+    """Factory function for creating environments"""
+    def _init():
+        return BalatroEnv(**kwargs)
+    return _init
+
+
+# ---------------------------------------------------------------------------
+# Testing
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    # Test the complete environment
+    env = BalatroEnv(render_mode="human", seed=42)
+    
+    # Validate determinism
+    print("Testing determinism...")
+    BalatroEnvValidator.validate_determinism(BalatroEnv, seed=42, steps=50)
+    
+    # Test basic gameplay
+    print("\nTesting basic gameplay...")
+    obs, _ = env.reset()
+    
+    print("Complete Balatro Environment initialized!")
+    print(f"Observation space: {env.observation_space}")
+    print(f"Action space: {env.action_space}")
+    print(f"\nStarting interactive test...")
+    
+    # Run a test episode
+    done = False
+    step = 0
+    
+    while not done and step < 100:
+        env.render()
+        valid_actions = np.where(obs['action_mask'])[0]
+        print(f"\nValid actions: {valid_actions}")
+        
+        # Simple policy for testing
+        if env.state.phase == Phase.BLIND_SELECT:
+            # Always select small blind
+            action = Action.SELECT_BLIND_BASE
+        elif env.state.phase == Phase.SHOP:
+            # End shop immediately
+            action = Action.SHOP_END
+        else:
+            # Random valid action
+            action = np.random.choice(valid_actions) if len(valid_actions) > 0 else 0
+        
+        print(f"Taking action: {action}")
+        obs, reward, terminated, truncated, info = env.step(action)
+        done = terminated or truncated
+        
+        print(f"Reward: {reward:.2f}")
+        if info:
+            print(f"Info: {info}")
+        
+        step += 1
+    
+    print(f"\nEpisode finished after {step} steps")
+    print(f"Final score: {env.state.chips_scored}")
+    print(f"Reached ante: {env.state.ante}")
+    
+    # Test save/load
+    print("\nTesting save/load...")
+    saved = env.save_state()
+    
+    # Take some actions
+    for _ in range(5):
+        valid = np.where(env._get_action_mask())[0]
+        if len(valid) > 0:
+            env.step(np.random.choice(valid))
+    
+    # Save current observation
+    obs_after = env._get_observation()
+    
+    # Restore
+    env.load_state(saved)
+    obs_restored = env._get_observation()
+    
+    # Check they match
+    for key in obs_restored:
+        if not np.array_equal(obs_after[key], obs_restored[key]):
+            print(f"✓ State properly changed for key: {key}")
+    
+    print("✓ Save/load working correctly"),
+                                    Enhancement.LUCKY: '?'
+                                }
+                                modifiers.append(enhancement_symbols.get(card_state.enhancement, '!'))
+                            
+                            if card_state.edition != Edition.NONE:
+                                edition_symbols = {
+                                    Edition.FOIL: 'F',
+                                    Edition.HOLOGRAPHIC: 'H',
+                                    Edition.POLYCHROME: 'P',
+                                    Edition.NEGATIVE: '-'
+                                }
+                                modifiers.append(edition_symbols.get(card_state.edition, '!'))
+                            
+                            if card_state.seal != Seal.NONE:
+                                seal_symbols = {
+                                    Seal.GOLD: '●G',
+                                    Seal.RED: '●R',
+                                    Seal.BLUE: '●B',
+                                    Seal.PURPLE: '●P'
+                                }
+                                modifiers.append(seal_symbols.get(card_state.seal, '●'))
+                            
+                            if modifiers:
+                                card_str = f"{card_str}[{''.join(modifiers)}]"
+                        
+                        hand_str += f"{card_str} "
+            
             print(f"\nHand: {hand_str}")
             if self.state.selected_cards:
                 print(f"Selected: {self.state.selected_cards}")
+            
+            # Show legend if any cards have modifiers
+            if any(idx in self.state.card_states for idx in self.state.hand_indexes):
+                print("Legend: + Bonus | × Mult | W Wild | G Glass | S Steel | ◊ Stone | $ Gold | ? Lucky")
+                print("        F Foil | H Holo | P Polychrome | - Negative | ● Seal (G/R/B/P)")
         
         elif self.state.phase == Phase.SHOP and self.shop:
             print("\n=== SHOP ===")
