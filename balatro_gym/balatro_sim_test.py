@@ -86,21 +86,34 @@ class BalatroTrajectoryGenerator:
         """Test basic hand evaluation and scoring"""
         print("=== TESTING BASIC SCORING ===")
         
-        # Test 1: High Card
+    
+    # Test 1: High Card
         cards = [
-            Card(14, 'Hearts'),  # Ace
-            Card(12, 'Diamonds'),  # Queen  
-            Card(9, 'Clubs'),
-            Card(6, 'Spades'),
-            Card(3, 'Hearts')
+        Card(14, 'Hearts'),  # Ace
+        Card(12, 'Diamonds'),  # Queen  
+        Card(9, 'Clubs'),
+        Card(6, 'Spades'),
+        Card(3, 'Hearts')
         ]
-        
+    
+        print(f"Testing with cards: {[(c.rank, c.suit) for c in cards]}")
+    
         result = self.simulator.evaluate_hand(cards)
+        print(f"Result returned: {result}")
+        print(f"Result type: {type(result)}")
+    
+        if result is None:
+           print("ERROR: evaluate_hand returned None!")
+           return
+        
+        if 'top' not in result:
+           print(f"ERROR: No 'top' key in result. Keys: {list(result.keys())}")
+           return
+        
         print(f"Hand: A♥ Q♦ 9♣ 6♠ 3♥")
         print(f"Detected: {result['top']}")
         print(f"Expected: High Card")
-        print()
-        
+        print() 
         # Test 2: Pair
         cards = [
             Card(9, 'Hearts'),
@@ -425,7 +438,7 @@ class BalatroTrajectoryGenerator:
 # Usage example
 if __name__ == "__main__":
     # Import your simulator
-    from balatro_simulator import BalatroSimulator  # Adjust import as needed
+    from balatro_sim import BalatroSimulator  # Adjust import as needed
     
     # Create simulator and test framework
     simulator = BalatroSimulator()

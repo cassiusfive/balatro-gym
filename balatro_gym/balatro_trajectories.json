@@ -1,0 +1,3511 @@
+[
+  [
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 3,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            14,
+            "Spades",
+            "none"
+          ],
+          [
+            13,
+            "Spades",
+            "none"
+          ],
+          [
+            12,
+            "Spades",
+            "none"
+          ],
+          [
+            11,
+            "Spades",
+            "none"
+          ],
+          [
+            10,
+            "Spades",
+            "none"
+          ],
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 44,
+        "consumables": 0
+      },
+      "action": {
+        "type": "play_hand",
+        "card_indices": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "reward": 112.08,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 0,
+        "discards_left": 3,
+        "score": 1208,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 39,
+        "consumables": 0
+      },
+      "done": true
+    }
+  ],
+  [
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 3,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            14,
+            "Spades",
+            "none"
+          ],
+          [
+            13,
+            "Spades",
+            "none"
+          ],
+          [
+            12,
+            "Spades",
+            "none"
+          ],
+          [
+            11,
+            "Spades",
+            "none"
+          ],
+          [
+            10,
+            "Spades",
+            "none"
+          ],
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 44,
+        "consumables": 0
+      },
+      "action": {
+        "type": "discard",
+        "card_indices": [
+          0,
+          1,
+          2
+        ]
+      },
+      "reward": -1,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 2,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            11,
+            "Spades",
+            "none"
+          ],
+          [
+            10,
+            "Spades",
+            "none"
+          ],
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 41,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 2,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            11,
+            "Spades",
+            "none"
+          ],
+          [
+            10,
+            "Spades",
+            "none"
+          ],
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 41,
+        "consumables": 0
+      },
+      "action": {
+        "type": "play_hand",
+        "card_indices": [
+          0,
+          1
+        ]
+      },
+      "reward": 0.25,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 2,
+        "score": 25,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 39,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 2,
+        "score": 25,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 39,
+        "consumables": 0
+      },
+      "action": {
+        "type": "discard",
+        "card_indices": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      "reward": -1,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 1,
+        "score": 25,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 35,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 1,
+        "score": 25,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 35,
+        "consumables": 0
+      },
+      "action": {
+        "type": "play_hand",
+        "card_indices": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      "reward": 0.19,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 2,
+        "discards_left": 1,
+        "score": 44,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ],
+          [
+            10,
+            "Clubs",
+            "none"
+          ],
+          [
+            9,
+            "Clubs",
+            "none"
+          ],
+          [
+            8,
+            "Clubs",
+            "none"
+          ],
+          [
+            7,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 31,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 2,
+        "discards_left": 1,
+        "score": 44,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ],
+          [
+            10,
+            "Clubs",
+            "none"
+          ],
+          [
+            9,
+            "Clubs",
+            "none"
+          ],
+          [
+            8,
+            "Clubs",
+            "none"
+          ],
+          [
+            7,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 31,
+        "consumables": 0
+      },
+      "action": {
+        "type": "play_hand",
+        "card_indices": [
+          0
+        ]
+      },
+      "reward": 0.16,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 1,
+        "discards_left": 1,
+        "score": 60,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ],
+          [
+            10,
+            "Clubs",
+            "none"
+          ],
+          [
+            9,
+            "Clubs",
+            "none"
+          ],
+          [
+            8,
+            "Clubs",
+            "none"
+          ],
+          [
+            7,
+            "Clubs",
+            "none"
+          ],
+          [
+            6,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 30,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 1,
+        "discards_left": 1,
+        "score": 60,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ],
+          [
+            10,
+            "Clubs",
+            "none"
+          ],
+          [
+            9,
+            "Clubs",
+            "none"
+          ],
+          [
+            8,
+            "Clubs",
+            "none"
+          ],
+          [
+            7,
+            "Clubs",
+            "none"
+          ],
+          [
+            6,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 30,
+        "consumables": 0
+      },
+      "action": {
+        "type": "play_hand",
+        "card_indices": [
+          0,
+          1
+        ]
+      },
+      "reward": 0.25,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 0,
+        "discards_left": 1,
+        "score": 85,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            11,
+            "Clubs",
+            "none"
+          ],
+          [
+            10,
+            "Clubs",
+            "none"
+          ],
+          [
+            9,
+            "Clubs",
+            "none"
+          ],
+          [
+            8,
+            "Clubs",
+            "none"
+          ],
+          [
+            7,
+            "Clubs",
+            "none"
+          ],
+          [
+            6,
+            "Clubs",
+            "none"
+          ],
+          [
+            5,
+            "Clubs",
+            "none"
+          ],
+          [
+            4,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 28,
+        "consumables": 0
+      },
+      "done": true
+    }
+  ],
+  [
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 3,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            14,
+            "Spades",
+            "none"
+          ],
+          [
+            13,
+            "Spades",
+            "none"
+          ],
+          [
+            12,
+            "Spades",
+            "none"
+          ],
+          [
+            11,
+            "Spades",
+            "none"
+          ],
+          [
+            10,
+            "Spades",
+            "none"
+          ],
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 44,
+        "consumables": 0
+      },
+      "action": {
+        "type": "discard",
+        "card_indices": [
+          0,
+          1
+        ]
+      },
+      "reward": -1,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 2,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            12,
+            "Spades",
+            "none"
+          ],
+          [
+            11,
+            "Spades",
+            "none"
+          ],
+          [
+            10,
+            "Spades",
+            "none"
+          ],
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 42,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 2,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            12,
+            "Spades",
+            "none"
+          ],
+          [
+            11,
+            "Spades",
+            "none"
+          ],
+          [
+            10,
+            "Spades",
+            "none"
+          ],
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 42,
+        "consumables": 0
+      },
+      "action": {
+        "type": "discard",
+        "card_indices": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      "reward": -1,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 1,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 38,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 1,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 38,
+        "consumables": 0
+      },
+      "action": {
+        "type": "discard",
+        "card_indices": [
+          0
+        ]
+      },
+      "reward": -1,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 0,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 37,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 0,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 37,
+        "consumables": 0
+      },
+      "action": {
+        "type": "play_hand",
+        "card_indices": [
+          0
+        ]
+      },
+      "reward": 0.12,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 0,
+        "score": 12,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 36,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 0,
+        "score": 12,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 36,
+        "consumables": 0
+      },
+      "action": {
+        "type": "play_hand",
+        "card_indices": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      "reward": 0.23,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 2,
+        "discards_left": 0,
+        "score": 35,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ],
+          [
+            10,
+            "Clubs",
+            "none"
+          ],
+          [
+            9,
+            "Clubs",
+            "none"
+          ],
+          [
+            8,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 32,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 2,
+        "discards_left": 0,
+        "score": 35,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ],
+          [
+            10,
+            "Clubs",
+            "none"
+          ],
+          [
+            9,
+            "Clubs",
+            "none"
+          ],
+          [
+            8,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 32,
+        "consumables": 0
+      },
+      "action": {
+        "type": "play_hand",
+        "card_indices": [
+          0,
+          1
+        ]
+      },
+      "reward": 0.18,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 1,
+        "discards_left": 0,
+        "score": 53,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ],
+          [
+            10,
+            "Clubs",
+            "none"
+          ],
+          [
+            9,
+            "Clubs",
+            "none"
+          ],
+          [
+            8,
+            "Clubs",
+            "none"
+          ],
+          [
+            7,
+            "Clubs",
+            "none"
+          ],
+          [
+            6,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 30,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 1,
+        "discards_left": 0,
+        "score": 53,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ],
+          [
+            10,
+            "Clubs",
+            "none"
+          ],
+          [
+            9,
+            "Clubs",
+            "none"
+          ],
+          [
+            8,
+            "Clubs",
+            "none"
+          ],
+          [
+            7,
+            "Clubs",
+            "none"
+          ],
+          [
+            6,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 30,
+        "consumables": 0
+      },
+      "action": {
+        "type": "play_hand",
+        "card_indices": [
+          0
+        ]
+      },
+      "reward": 0.15,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 0,
+        "discards_left": 0,
+        "score": 68,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ],
+          [
+            10,
+            "Clubs",
+            "none"
+          ],
+          [
+            9,
+            "Clubs",
+            "none"
+          ],
+          [
+            8,
+            "Clubs",
+            "none"
+          ],
+          [
+            7,
+            "Clubs",
+            "none"
+          ],
+          [
+            6,
+            "Clubs",
+            "none"
+          ],
+          [
+            5,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 29,
+        "consumables": 0
+      },
+      "done": true
+    }
+  ],
+  [
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 3,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            14,
+            "Spades",
+            "none"
+          ],
+          [
+            13,
+            "Spades",
+            "none"
+          ],
+          [
+            12,
+            "Spades",
+            "none"
+          ],
+          [
+            11,
+            "Spades",
+            "none"
+          ],
+          [
+            10,
+            "Spades",
+            "none"
+          ],
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 44,
+        "consumables": 0
+      },
+      "action": {
+        "type": "discard",
+        "card_indices": [
+          0,
+          1,
+          2
+        ]
+      },
+      "reward": -1,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 2,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            11,
+            "Spades",
+            "none"
+          ],
+          [
+            10,
+            "Spades",
+            "none"
+          ],
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 41,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 2,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            11,
+            "Spades",
+            "none"
+          ],
+          [
+            10,
+            "Spades",
+            "none"
+          ],
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 41,
+        "consumables": 0
+      },
+      "action": {
+        "type": "discard",
+        "card_indices": [
+          0,
+          1,
+          2
+        ]
+      },
+      "reward": -1,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 1,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 38,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 1,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 38,
+        "consumables": 0
+      },
+      "action": {
+        "type": "play_hand",
+        "card_indices": [
+          0,
+          1,
+          2
+        ]
+      },
+      "reward": 0.26,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 1,
+        "score": 26,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 35,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 1,
+        "score": 26,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 35,
+        "consumables": 0
+      },
+      "action": {
+        "type": "discard",
+        "card_indices": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      "reward": -1,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 0,
+        "score": 26,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ],
+          [
+            10,
+            "Clubs",
+            "none"
+          ],
+          [
+            9,
+            "Clubs",
+            "none"
+          ],
+          [
+            8,
+            "Clubs",
+            "none"
+          ],
+          [
+            7,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 31,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 0,
+        "score": 26,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ],
+          [
+            10,
+            "Clubs",
+            "none"
+          ],
+          [
+            9,
+            "Clubs",
+            "none"
+          ],
+          [
+            8,
+            "Clubs",
+            "none"
+          ],
+          [
+            7,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 31,
+        "consumables": 0
+      },
+      "action": {
+        "type": "play_hand",
+        "card_indices": [
+          0
+        ]
+      },
+      "reward": 0.16,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 2,
+        "discards_left": 0,
+        "score": 42,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ],
+          [
+            10,
+            "Clubs",
+            "none"
+          ],
+          [
+            9,
+            "Clubs",
+            "none"
+          ],
+          [
+            8,
+            "Clubs",
+            "none"
+          ],
+          [
+            7,
+            "Clubs",
+            "none"
+          ],
+          [
+            6,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 30,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 2,
+        "discards_left": 0,
+        "score": 42,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ],
+          [
+            10,
+            "Clubs",
+            "none"
+          ],
+          [
+            9,
+            "Clubs",
+            "none"
+          ],
+          [
+            8,
+            "Clubs",
+            "none"
+          ],
+          [
+            7,
+            "Clubs",
+            "none"
+          ],
+          [
+            6,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 30,
+        "consumables": 0
+      },
+      "action": {
+        "type": "play_hand",
+        "card_indices": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "reward": 111.92,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 0,
+        "discards_left": 0,
+        "score": 1234,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            8,
+            "Clubs",
+            "none"
+          ],
+          [
+            7,
+            "Clubs",
+            "none"
+          ],
+          [
+            6,
+            "Clubs",
+            "none"
+          ],
+          [
+            5,
+            "Clubs",
+            "none"
+          ],
+          [
+            4,
+            "Clubs",
+            "none"
+          ],
+          [
+            3,
+            "Clubs",
+            "none"
+          ],
+          [
+            2,
+            "Clubs",
+            "none"
+          ],
+          [
+            14,
+            "Diamonds",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 25,
+        "consumables": 0
+      },
+      "done": true
+    }
+  ],
+  [
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 4,
+        "discards_left": 3,
+        "score": 0,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            14,
+            "Spades",
+            "none"
+          ],
+          [
+            13,
+            "Spades",
+            "none"
+          ],
+          [
+            12,
+            "Spades",
+            "none"
+          ],
+          [
+            11,
+            "Spades",
+            "none"
+          ],
+          [
+            10,
+            "Spades",
+            "none"
+          ],
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 44,
+        "consumables": 0
+      },
+      "action": {
+        "type": "play_hand",
+        "card_indices": [
+          0,
+          1
+        ]
+      },
+      "reward": 0.26,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 3,
+        "score": 26,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            12,
+            "Spades",
+            "none"
+          ],
+          [
+            11,
+            "Spades",
+            "none"
+          ],
+          [
+            10,
+            "Spades",
+            "none"
+          ],
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 42,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 3,
+        "score": 26,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            12,
+            "Spades",
+            "none"
+          ],
+          [
+            11,
+            "Spades",
+            "none"
+          ],
+          [
+            10,
+            "Spades",
+            "none"
+          ],
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 42,
+        "consumables": 0
+      },
+      "action": {
+        "type": "discard",
+        "card_indices": [
+          0,
+          1,
+          2
+        ]
+      },
+      "reward": -1,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 2,
+        "score": 26,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 39,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 2,
+        "score": 26,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            9,
+            "Spades",
+            "none"
+          ],
+          [
+            8,
+            "Spades",
+            "none"
+          ],
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 39,
+        "consumables": 0
+      },
+      "action": {
+        "type": "discard",
+        "card_indices": [
+          0,
+          1
+        ]
+      },
+      "reward": -1,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 1,
+        "score": 26,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 37,
+        "consumables": 0
+      },
+      "done": false
+    },
+    {
+      "state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 3,
+        "discards_left": 1,
+        "score": 26,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            7,
+            "Spades",
+            "none"
+          ],
+          [
+            6,
+            "Spades",
+            "none"
+          ],
+          [
+            5,
+            "Spades",
+            "none"
+          ],
+          [
+            4,
+            "Spades",
+            "none"
+          ],
+          [
+            3,
+            "Spades",
+            "none"
+          ],
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 37,
+        "consumables": 0
+      },
+      "action": {
+        "type": "play_hand",
+        "card_indices": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "reward": 110.0,
+      "next_state": {
+        "money": 4,
+        "ante": 1,
+        "hands_left": 0,
+        "discards_left": 1,
+        "score": 1026,
+        "blind_requirement": 300,
+        "hand_cards": [
+          [
+            2,
+            "Spades",
+            "none"
+          ],
+          [
+            14,
+            "Clubs",
+            "none"
+          ],
+          [
+            13,
+            "Clubs",
+            "none"
+          ],
+          [
+            12,
+            "Clubs",
+            "none"
+          ],
+          [
+            11,
+            "Clubs",
+            "none"
+          ],
+          [
+            10,
+            "Clubs",
+            "none"
+          ],
+          [
+            9,
+            "Clubs",
+            "none"
+          ],
+          [
+            8,
+            "Clubs",
+            "none"
+          ]
+        ],
+        "jokers": [],
+        "hand_levels": {
+          "High Card": 1,
+          "Pair": 1,
+          "Two Pair": 1,
+          "Three of a Kind": 1,
+          "Straight": 1,
+          "Flush": 1,
+          "Full House": 1,
+          "Four of a Kind": 1,
+          "Straight Flush": 1,
+          "Five of a Kind": 1,
+          "Flush House": 1,
+          "Flush Five": 1
+        },
+        "deck_size": 32,
+        "consumables": 0
+      },
+      "done": true
+    }
+  ]
+]
