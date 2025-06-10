@@ -42,6 +42,11 @@ from balatro_gym.consumables import (
 from balatro_gym.unified_scoring import UnifiedScorer, ScoringContext
 from complete_joker_effects import CompleteJokerEffects
 
+# Import boss blind system
+from balatro_gym.boss_blinds import (
+    BossBlindType, BossBlind, BOSS_BLINDS, BossBlindManager, select_boss_blind
+)
+
 # Blind scaling
 BLIND_CHIPS = {
     1: {'small': 300, 'big': 450, 'boss': 600},
@@ -186,6 +191,12 @@ class UnifiedGameState:
     card_enhancements: Dict[int, Enhancement] = field(default_factory=dict)
     card_editions: Dict[int, Edition] = field(default_factory=dict)
     card_seals: Dict[int, Seal] = field(default_factory=dict)
+    
+    # Boss blind state
+    active_boss_blind: Optional[BossBlindType] = None
+    boss_blind_active: bool = False
+    face_down_cards: List[int] = field(default_factory=list)
+    force_draw_count: Optional[int] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dict for joker effects and other systems"""
@@ -342,6 +353,7 @@ class BalatroEnv(gym.Env):
         self.consumable_manager: Optional[ConsumableManager] = None
         self.unified_scorer: Optional[UnifiedScorer] = None
         self.shop: Optional[Shop] = None
+        self.boss_blind_manager: Optional[BossBlindManager] = None
         
         # Initialize environment
         self.reset()
@@ -392,6 +404,11 @@ class BalatroEnv(gym.Env):
             # Stats for reward shaping
             'hands_played': spaces.Box(0, 1000, (), dtype=np.int16),
             'best_hand_this_ante': spaces.Box(0, 1_000_000, (), dtype=np.int32),
+            
+            # Boss blind info
+            'boss_blind_active': spaces.Box(0, 1, (), dtype=np.int8),
+            'boss_blind_type': spaces.Box(0, 30, (), dtype=np.int8),  # BossBlindType enum value
+            'face_down_cards': spaces.MultiBinary(8),  # Which cards in hand are face down
         })
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
@@ -423,6 +440,7 @@ class BalatroEnv(gym.Env):
         
         self.joker_effects_engine = CompleteJokerEffects()
         self.consumable_manager = ConsumableManager()
+        self.boss_blind_manager = BossBlindManager()
         
         # Initialize unified scorer
         self.unified_scorer = UnifiedScorer(self.engine, self.joker_effects_engine)
@@ -435,7 +453,30 @@ class BalatroEnv(gym.Env):
         # Sync state with game
         self._sync_state_from_game()
         
+        # If starting in play phase, apply initial boss blind effects
+        if self.state.phase == Phase.PLAY and self.state.boss_blind_active:
+            self._apply_boss_blind_to_hand()
+        
         return self._get_observation(), {}
+
+    def _apply_boss_blind_to_hand(self):
+        """Apply boss blind effects when drawing a new hand"""
+        if not self.state.boss_blind_active or not self.boss_blind_manager.active_blind:
+            return
+        
+        hand_cards = [self.state.deck[i] for i in self.state.hand_indexes]
+        effects = self.boss_blind_manager.on_hand_drawn(hand_cards, self.state.to_dict())
+        
+        # Apply face down effects
+        if 'face_down_cards' in effects:
+            self.state.face_down_cards = effects['face_down_cards']
+        
+        # Apply forced discards (The Hook)
+        if 'discarded_cards' in effects:
+            for idx in sorted(effects['discarded_cards'], reverse=True):
+                if idx < len(self.state.hand_indexes):
+                    self.state.hand_indexes.pop(idx)
+            self._sync_state_to_game()
 
     def _sync_state_from_game(self):
         """Sync unified state from game systems"""
@@ -483,11 +524,13 @@ class BalatroEnv(gym.Env):
             
             # Get the actual cards for scoring
             selected_cards = []
+            selected_game_cards = []
             for idx in self.state.selected_cards:
                 if idx < len(self.state.hand_indexes):
                     card_idx = self.state.hand_indexes[idx]
                     if card_idx < len(self.state.deck):
                         card = self.state.deck[card_idx]
+                        selected_game_cards.append(card)
                         # Convert to scoring format with enhancements
                         scoring_card = CardAdapter.to_scoring_format(card, card_idx, self.state)
                         selected_cards.append(scoring_card)
@@ -506,6 +549,12 @@ class BalatroEnv(gym.Env):
             # Get hand type name
             hand_type_name = hand_type.name.replace('_', ' ').title()
             
+            # Check if boss blind allows playing this hand
+            if self.state.boss_blind_active and self.boss_blind_manager.active_blind:
+                can_play, message = self.boss_blind_manager.can_play_hand(selected_game_cards, hand_type_name)
+                if not can_play:
+                    return self._get_observation(), -1.0, False, False, {'error': message}
+            
             # Create scoring context
             scoring_context = ScoringContext(
                 cards=selected_cards,
@@ -516,7 +565,21 @@ class BalatroEnv(gym.Env):
             )
             
             # Use unified scorer
-            final_score, breakdown = self.unified_scorer.score_hand(scoring_context)
+            base_score, breakdown = self.unified_scorer.score_hand(scoring_context)
+            
+            # Apply boss blind scoring modifications
+            final_score = base_score
+            if self.state.boss_blind_active and self.boss_blind_manager.active_blind:
+                # Get base chips and mult for modification
+                base_chips, base_mult = self.engine.get_hand_chips_mult(hand_type)
+                modified_chips, modified_mult = self.boss_blind_manager.modify_scoring(
+                    base_chips, base_mult, selected_game_cards, hand_type_name
+                )
+                # Apply the modification ratio to the final score
+                if base_chips > 0 and base_mult > 0:
+                    chip_ratio = modified_chips / base_chips
+                    mult_ratio = modified_mult / base_mult
+                    final_score = int(final_score * chip_ratio * mult_ratio)
             
             # Update state
             self.state.chips_scored += final_score
@@ -526,6 +589,14 @@ class BalatroEnv(gym.Env):
             
             # Track hand usage for jokers like Obelisk
             self.engine.hand_play_counts[hand_type] += 1
+            
+            # Boss blind post-scoring effects
+            if self.state.boss_blind_active and self.boss_blind_manager.active_blind:
+                self.boss_blind_manager.on_hand_scored(selected_game_cards, hand_type_name, self.state.to_dict())
+                
+                # Apply any state changes from boss blind (e.g., The Tooth money penalty)
+                if 'money' in self.state.to_dict():
+                    self.state.money = self.state.to_dict()['money']
             
             # Clear selection
             self.state.selected_cards = []
@@ -550,8 +621,37 @@ class BalatroEnv(gym.Env):
             else:
                 self.state.hands_left -= 1
                 self.game.round_hands = self.state.hands_left
+                
+                # Draw new cards
                 self.game._draw_cards()
                 self._sync_state_from_game()
+                
+                # Apply boss blind effects to newly drawn hand
+                if self.state.boss_blind_active and self.boss_blind_manager.active_blind:
+                    hand_cards = [self.state.deck[i] for i in self.state.hand_indexes]
+                    effects = self.boss_blind_manager.on_hand_drawn(hand_cards, self.state.to_dict())
+                    
+                    # Apply face down effects
+                    if 'face_down_cards' in effects:
+                        self.state.face_down_cards = effects['face_down_cards']
+                    
+                    # Apply forced discards (The Hook)
+                    if 'discarded_cards' in effects:
+                        for idx in sorted(effects['discarded_cards'], reverse=True):
+                            if idx < len(self.state.hand_indexes):
+                                self.state.hand_indexes.pop(idx)
+                
+                # Handle forced draw count (The Serpent)
+                if self.state.force_draw_count is not None:
+                    # Ensure we have exactly the forced number of cards
+                    while len(self.state.hand_indexes) > self.state.force_draw_count:
+                        self.state.hand_indexes.pop()
+                    while len(self.state.hand_indexes) < self.state.force_draw_count:
+                        # Draw more cards if needed
+                        available = [i for i, card in enumerate(self.state.deck) if i not in self.state.hand_indexes]
+                        if available:
+                            self.state.hand_indexes.append(self.rng.choice('card_draw', available))
+                    self.state.force_draw_count = None
                 
         elif action == Action.DISCARD:
             if self.state.discards_left <= 0:
@@ -807,12 +907,36 @@ class BalatroEnv(gym.Env):
             blind_key = ['small', 'big', 'boss'][blind_type]
             self.state.chips_needed = BLIND_CHIPS[min(self.state.ante, 8)][blind_key]
             
+            # Handle boss blind activation
+            if blind_type == 2:  # Boss blind
+                # Select and activate boss blind
+                boss_type = select_boss_blind(self.state.ante)
+                effects = self.boss_blind_manager.activate_boss_blind(boss_type, self.state.to_dict())
+                
+                # Apply chip multiplier
+                self.state.chips_needed = int(self.state.chips_needed * effects['chip_mult'])
+                
+                # Apply modifications
+                if 'discards' in effects['modifications']:
+                    self.state.discards_left = effects['modifications']['discards']
+                    self.game.round_discards = effects['modifications']['discards']
+                if 'hand_size' in effects['modifications']:
+                    self.state.hand_size += effects['modifications']['hand_size']
+                    self.game.hand_size = self.state.hand_size
+                if 'hands' in effects['modifications']:
+                    self.state.hands_left = effects['modifications']['hands']
+                    self.game.round_hands = effects['modifications']['hands']
+                
+                self.state.active_boss_blind = boss_type
+                self.state.boss_blind_active = True
+                info['boss_blind'] = self.boss_blind_manager.active_blind.name
+                info['boss_effect'] = self.boss_blind_manager.active_blind.description
+                
+                # Boss blind bonus reward
+                reward = 10.0
+            
             # Update game blind
             self.game.blinds[self.game.blind_index] = self.state.chips_needed
-            
-            # Boss blind bonus reward
-            if blind_type == 2:
-                reward = 10.0
             
             # Transition to play
             self.state.phase = Phase.PLAY
@@ -849,6 +973,15 @@ class BalatroEnv(gym.Env):
             if 'destroy_joker' in effect:
                 joker_name = effect['destroy_joker']
                 self.state.jokers = [j for j in self.state.jokers if j.name != joker_name]
+        
+        # Deactivate boss blind if active
+        if self.state.boss_blind_active and self.boss_blind_manager.active_blind:
+            # Award extra money for beating boss
+            self.state.money += self.boss_blind_manager.active_blind.money_reward
+            self.boss_blind_manager.deactivate()
+            self.state.active_boss_blind = None
+            self.state.boss_blind_active = False
+            self.state.face_down_cards = []
         
         # Reset round stats
         self.state.best_hand_this_ante = 0
@@ -1018,6 +1151,11 @@ class BalatroEnv(gym.Env):
             
             'hands_played': np.int16(self.state.hands_played_total),
             'best_hand_this_ante': np.int32(self.state.best_hand_this_ante),
+            
+            # Boss blind info
+            'boss_blind_active': np.int8(1 if self.state.boss_blind_active else 0),
+            'boss_blind_type': np.int8(self.state.active_boss_blind.value if self.state.active_boss_blind else 0),
+            'face_down_cards': np.array([1 if i in self.state.face_down_cards else 0 for i in range(8)]),
         }
         
         # Add shop info if in shop
@@ -1075,6 +1213,10 @@ class BalatroEnv(gym.Env):
                 'deck': self.game.deck.copy(),
                 'state': self.game.state,
                 'blind_index': self.game.blind_index,
+            },
+            'boss_blind_state': {
+                'active_blind': self.boss_blind_manager.active_blind,
+                'blind_state': self.boss_blind_manager.blind_state.copy() if self.boss_blind_manager.blind_state else {}
             }
         }
     
@@ -1092,6 +1234,11 @@ class BalatroEnv(gym.Env):
         self.game.state = saved_state['game_state']['state']
         self.game.blind_index = saved_state['game_state']['blind_index']
         
+        # Restore boss blind state
+        if 'boss_blind_state' in saved_state:
+            self.boss_blind_manager.active_blind = saved_state['boss_blind_state']['active_blind']
+            self.boss_blind_manager.blind_state = saved_state['boss_blind_state']['blind_state'].copy()
+        
         # Sync states
         self._sync_state_from_game()
 
@@ -1102,11 +1249,25 @@ class BalatroEnv(gym.Env):
         
         print(f"\n{'='*50}")
         print(f"Ante {self.state.ante} - Round {self.state.round} - Phase: {Phase(self.state.phase).name}")
+        
+        # Show boss blind info if active
+        if self.state.boss_blind_active and self.boss_blind_manager.active_blind:
+            print(f"BOSS BLIND: {self.boss_blind_manager.active_blind.name}")
+            print(f"Effect: {self.boss_blind_manager.active_blind.description}")
+        
         print(f"Score: {self.state.chips_scored}/{self.state.chips_needed} | Money: ${self.state.money}")
         print(f"Hands: {self.state.hands_left} | Discards: {self.state.discards_left}")
         
         if self.state.phase == Phase.PLAY:
-            print(f"\nHand: {self.game.hand_to_string() if self.game else 'N/A'}")
+            # Show hand with face down indicators
+            hand_str = ""
+            for i, idx in enumerate(self.state.hand_indexes):
+                if idx < len(self.state.deck):
+                    if i in self.state.face_down_cards:
+                        hand_str += "[??] "
+                    else:
+                        hand_str += f"{self.state.deck[idx]} "
+            print(f"\nHand: {hand_str}")
             if self.state.selected_cards:
                 print(f"Selected: {self.state.selected_cards}")
         
@@ -1125,7 +1286,19 @@ class BalatroEnv(gym.Env):
             print(f"[S] Skip Blind")
         
         if self.state.jokers:
-            print(f"\nJokers ({len(self.state.jokers)}/{self.state.joker_slots}): {', '.join(j.name for j in self.state.jokers)}")
+            joker_display = []
+            active_slots = self.state.joker_slots
+            if self.state.boss_blind_active:
+                active_slots -= self.boss_blind_manager.get_disabled_joker_count()
+            
+            for i, joker in enumerate(self.state.jokers[:active_slots]):
+                joker_display.append(joker.name)
+            
+            # Show disabled jokers
+            for i in range(active_slots, len(self.state.jokers)):
+                joker_display.append(f"[DISABLED: {self.state.jokers[i].name}]")
+            
+            print(f"\nJokers ({len(self.state.jokers)}/{self.state.joker_slots}): {', '.join(joker_display)}")
         
         if self.state.consumables:
             print(f"Consumables ({len(self.state.consumables)}/{self.state.consumable_slots}): {', '.join(self.state.consumables)}")
