@@ -1,5 +1,75 @@
 class BalatroSimulator:
     def __init__(self):
+        # Planet cards (hand upgrades)
+        self.planets = {
+            'Mercury': 'Pair',
+            'Venus': 'Two Pair', 
+            'Earth': 'Full House',
+            'Mars': 'Four of a Kind',
+            'Jupiter': 'Flush',
+            'Saturn': 'Three of a Kind',
+            'Uranus': 'Straight',
+            'Neptune': 'Straight Flush',
+            'Pluto': 'High Card',
+            'Planet X': 'Five of a Kind',
+            'Ceres': 'Flush House',
+            'Eris': 'Flush Five'
+        }
+        
+        # Tarot cards effects
+        self.tarots = {
+            'The Fool': 'create_tarot',
+            'The Magician': 'enhance_cards',
+            'The High Priestess': 'create_planet', 
+            'The Empress': 'enhance_cards',
+            'The Emperor': 'create_tarot',
+            'The Hierophant': 'enhance_cards',
+            'The Lovers': 'enhance_cards',
+            'The Chariot': 'enhance_cards', 
+            'Strength': 'modify_cards',
+            'The Hermit': 'money',
+            'Wheel of Fortune': 'modify_cards',
+            'Justice': 'enhance_cards',
+            'The Hanged Man': 'destroy_cards',
+            'Death': 'destroy_cards',
+            'Temperance': 'money',
+            'The Devil': 'enhance_cards',
+            'The Tower': 'enhance_cards',
+            'The Star': 'modify_cards',
+            'The Moon': 'modify_cards',
+            'The Sun': 'modify_cards',
+            'Judgement': 'create_planet',
+            'The World': 'modify_cards'
+        }
+        
+        # Card enhancements
+        self.enhancements = {
+            'bonus': {'chips': 30},
+            'mult': {'mult': 4},
+            'wild': {'acts_as_any_suit': True},
+            'glass': {'x_mult': 2, 'destroy_chance': 0.25},
+            'steel': {'x_mult': 1.5, 'permanent': True},
+            'stone': {'chips': 50, 'no_suit_rank': True},
+            'gold': {'money': 3, 'when_played': True},
+            'lucky': {'money_chance': 0.2, 'money_amount': 1}
+        }
+        
+        # Card editions
+        self.editions = {
+            'foil': {'chips': 50},
+            'holographic': {'mult': 10}, 
+            'polychrome': {'x_mult': 1.5},
+            'negative': {'joker_slot': 1}
+        }
+        
+        # Card seals
+        self.seals = {
+            'red': {'retrigger': 1},
+            'blue': {'create_planet_if_held': True},
+            'gold': {'money': 3, 'when_played': True},
+            'purple': {'create_tarot_when_discarded': True}
+        }
+        
         # Complete hand values (EXACT from Balatro)
         self.base_hands = {
             'Flush Five': {'chips': 160, 'mult': 16, 'l_chips': 50, 'l_mult': 3},
@@ -441,10 +511,180 @@ class BalatroSimulator:
         if results["Three of a Kind"]:
             results["Pair"] = [results["Three of a Kind"][0][:2]]
 
-        return results
+    def apply_planet_card(self, planet_name, hand_levels):
+        """Apply planet card to upgrade hand level"""
+        hand_type = self.planets[planet_name]
+        hand_levels[hand_type] = hand_levels.get(hand_type, 1) + 1
+        return hand_levels
     
-    def calculate_score(self, cards, jokers, hand_levels):
-        """Perfect Balatro scoring replication"""
+    def apply_tarot_card(self, tarot_name, target_cards, game_state):
+        """Apply tarot card effects"""
+        effect = self.tarots[tarot_name]
+        
+        if tarot_name == 'The Magician':
+            # Enhance up to 2 cards to Lucky
+            for i, card in enumerate(target_cards[:2]):
+                card.enhancement = 'lucky'
+                
+        elif tarot_name == 'The Empress':
+            # Enhance up to 2 cards to Mult
+            for i, card in enumerate(target_cards[:2]):
+                card.enhancement = 'mult'
+                
+        elif tarot_name == 'The Emperor':
+            # Create 2-4 Tarot cards
+            game_state['consumables'].extend(['random_tarot'] * 3)
+            
+        elif tarot_name == 'The Hierophant':
+            # Enhance up to 2 cards to Bonus
+            for i, card in enumerate(target_cards[:2]):
+                card.enhancement = 'bonus'
+                
+        elif tarot_name == 'The Lovers':
+            # Enhance 1 card to Wild
+            if target_cards:
+                target_cards[0].enhancement = 'wild'
+                
+        elif tarot_name == 'The Chariot':
+            # Enhance 1 card to Steel
+            if target_cards:
+                target_cards[0].enhancement = 'steel'
+                
+        elif tarot_name == 'Strength':
+            # Increase rank of up to 2 cards by 1
+            for card in target_cards[:2]:
+                card.rank = min(14, card.rank + 1)
+                
+        elif tarot_name == 'The Hermit':
+            # Gain money equal to hand size
+            game_state['money'] += len(game_state['hand'])
+            
+        elif tarot_name == 'Wheel of Fortune':
+            # 1 in 4 chance to add foil, holo, or poly to random card
+            import random
+            if random.random() < 0.25:
+                card = random.choice(target_cards)
+                card.edition = random.choice(['foil', 'holographic', 'polychrome'])
+                
+        elif tarot_name == 'Justice':
+            # Enhance 1 card to Glass
+            if target_cards:
+                target_cards[0].enhancement = 'glass'
+                
+        elif tarot_name == 'The Hanged Man':
+            # Destroy up to 2 cards, gain money
+            for card in target_cards[:2]:
+                game_state['money'] += 2
+                # Remove card from deck
+                
+        elif tarot_name == 'Death':
+            # Convert leftmost 2 cards to rightmost 2 cards
+            if len(target_cards) >= 4:
+                for i in range(2):
+                    target_cards[i].rank = target_cards[-(i+1)].rank
+                    target_cards[i].suit = target_cards[-(i+1)].suit
+                    
+        elif tarot_name == 'Temperance':
+            # Gain money equal to Joker sell values
+            for joker in game_state['jokers']:
+                game_state['money'] += joker.sell_value
+                
+        elif tarot_name == 'The Devil':
+            # Enhance 1 card to Gold
+            if target_cards:
+                target_cards[0].enhancement = 'gold'
+                
+        elif tarot_name == 'The Tower':
+            # Enhance 1 card to Stone
+            if target_cards:
+                target_cards[0].enhancement = 'stone'
+                
+        elif tarot_name == 'The Star':
+            # Convert up to 3 cards to Diamonds
+            for card in target_cards[:3]:
+                card.suit = 'Diamonds'
+                
+        elif tarot_name == 'The Moon':
+            # Convert up to 3 cards to Clubs  
+            for card in target_cards[:3]:
+                card.suit = 'Clubs'
+                
+        elif tarot_name == 'The Sun':
+            # Convert up to 3 cards to Hearts
+            for card in target_cards[:3]:
+                card.suit = 'Hearts'
+                
+        elif tarot_name == 'Judgement':
+            # Create random Planet card
+            import random
+            game_state['consumables'].append(random.choice(list(self.planets.keys())))
+            
+        elif tarot_name == 'The World':
+            # Convert up to 3 cards to Spades
+            for card in target_cards[:3]:
+                card.suit = 'Spades'
+        
+        return game_state
+    
+    def calculate_card_effects(self, card, context):
+        """Calculate individual card enhancement/edition/seal effects"""
+        effect = {'chips': 0, 'mult': 0, 'x_mult': 1, 'money': 0, 'retriggers': 0}
+        
+        # Enhancement effects
+        if hasattr(card, 'enhancement') and card.enhancement:
+            enh = self.enhancements.get(card.enhancement, {})
+            effect['chips'] += enh.get('chips', 0)
+            effect['mult'] += enh.get('mult', 0)
+            effect['x_mult'] *= enh.get('x_mult', 1)
+            
+            if card.enhancement == 'glass' and context == 'scoring':
+                # Glass card X2 mult but 1/4 chance to destroy
+                import random
+                if random.random() < 0.25:
+                    effect['destroy'] = True
+                    
+            elif card.enhancement == 'gold' and context == 'scoring':
+                effect['money'] += 3
+                
+            elif card.enhancement == 'lucky' and context == 'scoring':
+                import random
+                if random.random() < 0.2:
+                    effect['money'] += 1
+                    
+        # Edition effects  
+        if hasattr(card, 'edition') and card.edition:
+            ed = self.editions.get(card.edition, {})
+            effect['chips'] += ed.get('chips', 0)
+            effect['mult'] += ed.get('mult', 0)
+            effect['x_mult'] *= ed.get('x_mult', 1)
+            
+        # Seal effects
+        if hasattr(card, 'seal') and card.seal:
+            seal = self.seals.get(card.seal, {})
+            if card.seal == 'red':
+                effect['retriggers'] += 1
+            elif card.seal == 'gold' and context == 'scoring':
+                effect['money'] += 3
+                
+        return effect
+    
+    def calculate_steel_joker_effect(self, steel_cards_count):
+        """Calculate Steel Joker effect based on steel cards in deck"""
+        if steel_cards_count > 0:
+            return {'x_mult': 1 + (0.2 * steel_cards_count)}
+        return None
+    
+    def calculate_stone_joker_effect(self, stone_cards_count):
+        """Calculate Stone Joker effect based on stone cards in deck"""
+        if stone_cards_count > 0:
+            return {'chips': 25 * stone_cards_count}
+        return None
+    
+    def calculate_score(self, cards, jokers, hand_levels, game_state=None):
+        """Perfect Balatro scoring replication with all mechanics"""
+        if game_state is None:
+            game_state = {'money': 0, 'deck': [], 'consumables': []}
+            
         # 1. Evaluate hand type using exact Lua logic
         hand_result = self.evaluate_hand(cards)
         hand_type = hand_result['top']
@@ -457,17 +697,139 @@ class BalatroSimulator:
         chips = base['chips'] + (level - 1) * base['l_chips']
         mult = base['mult'] + (level - 1) * base['l_mult']
         
-        # 3. Add card values
+        # 3. Add individual card values and effects
         for card in scoring_cards:
+            # Base card value
             chips += card.base_value
             
+            # Card enhancement/edition/seal effects
+            card_effect = self.calculate_card_effects(card, 'scoring')
+            chips += card_effect['chips']
+            mult += card_effect['mult']
+            mult *= card_effect['x_mult']
+            game_state['money'] += card_effect['money']
+            
+            # Handle retriggering (Red seal, Sock and Buskin, etc.)
+            retriggers = card_effect['retriggers']
+            for _ in range(retriggers):
+                chips += card.base_value
+                # Apply enhancement effects again
+                repeat_effect = self.calculate_card_effects(card, 'scoring')
+                chips += repeat_effect['chips']
+                mult += repeat_effect['mult']
+                mult *= repeat_effect['x_mult']
+                
         # 4. Apply joker effects IN ORDER (critical!)
         for joker in jokers:
-            effect = self.apply_joker_effect(joker, cards, scoring_cards, hand_type)
+            effect = self.apply_joker_effect(joker, cards, scoring_cards, hand_type, game_state)
             if effect:
                 chips += effect.get('chips', 0)
                 mult += effect.get('mult', 0)
                 if 'x_mult' in effect:
                     mult *= effect['x_mult']
+                game_state['money'] += effect.get('money', 0)
+                
+        # 5. Handle special joker effects that depend on deck composition
+        if game_state.get('deck'):
+            steel_count = sum(1 for card in game_state['deck'] if getattr(card, 'enhancement', None) == 'steel')
+            stone_count = sum(1 for card in game_state['deck'] if getattr(card, 'enhancement', None) == 'stone')
+            
+            # Steel Joker effect
+            steel_joker_effect = self.calculate_steel_joker_effect(steel_count)
+            if steel_joker_effect:
+                mult *= steel_joker_effect['x_mult']
+                
+            # Stone Joker effect  
+            stone_joker_effect = self.calculate_stone_joker_effect(stone_count)
+            if stone_joker_effect:
+                chips += stone_joker_effect['chips']
+                
+        return int(chips * mult), game_state
+    
+    def apply_joker_effect(self, joker, all_cards, scoring_cards, hand_type, game_state):
+        """Apply individual joker effects with full context"""
+        joker_data = self.jokers.get(joker.name, {})
+        
+        # Basic mult/chips jokers
+        if 'mult' in joker_data and not joker_data.get('condition'):
+            return {'mult': joker_data['mult']}
+            
+        if 'chips' in joker_data and not joker_data.get('condition'):
+            return {'chips': joker_data['chips']}
+            
+        # Hand-type specific jokers
+        if joker_data.get('hand_type') == hand_type:
+            effect = {}
+            if 'mult' in joker_data:
+                effect['mult'] = joker_data['mult']
+            if 'chips' in joker_data:
+                effect['chips'] = joker_data['chips']
+            if 'x_mult' in joker_data:
+                effect['x_mult'] = joker_data['x_mult']
+            return effect
+            
+        # Individual card effects
+        if 'ranks' in joker_data:
+            for card in scoring_cards:
+                if card.rank in joker_data['ranks']:
+                    effect = {}
+                    if 'mult' in joker_data:
+                        effect['mult'] = joker_data['mult']
+                    if 'chips' in joker_data:
+                        effect['chips'] = joker_data['chips']
+                    if 'x_mult' in joker_data:
+                        effect['x_mult'] = joker_data['x_mult']
+                    return effect
                     
-        return chips * mult
+        # Suit-based jokers
+        if 'suit' in joker_data:
+            for card in scoring_cards:
+                if card.suit == joker_data['suit']:
+                    effect = {}
+                    if 'mult' in joker_data:
+                        effect['mult'] = joker_data['mult']
+                    if 'chips' in joker_data:
+                        effect['chips'] = joker_data['chips']
+                    if 'money' in joker_data:
+                        effect['money'] = joker_data['money']
+                    return effect
+                    
+        # Face card effects
+        if joker_data.get('targets') == 'face_cards':
+            for card in scoring_cards:
+                if card.rank in [11, 12, 13]:  # J, Q, K
+                    effect = {}
+                    if 'mult' in joker_data:
+                        effect['mult'] = joker_data['mult']
+                    if 'chips' in joker_data:
+                        effect['chips'] = joker_data['chips']
+                    if 'money' in joker_data and joker_data.get('chance', 1) >= random.random():
+                        effect['money'] = joker_data['money']
+                    return effect
+                    
+        # Special conditions
+        if joker_data.get('condition') == 'even':
+            for card in scoring_cards:
+                if card.rank <= 10 and card.rank % 2 == 0:
+                    return {'mult': joker_data['mult']}
+                    
+        elif joker_data.get('condition') == 'odd':
+            for card in scoring_cards:
+                if (card.rank <= 10 and card.rank % 2 == 1) or card.rank == 14:  # Ace counts as odd
+                    return {'chips': joker_data['chips']}
+                    
+        # Global effects
+        if 'mult_per_joker' in joker_data:
+            joker_count = len([j for j in game_state.get('jokers', []) if j.type == 'Joker'])
+            return {'mult': joker_data['mult_per_joker'] * joker_count}
+            
+        if 'chips_per_deck_card' in joker_data:
+            deck_size = len(game_state.get('deck', []))
+            return {'chips': joker_data['chips_per_deck_card'] * deck_size}
+            
+        if 'chips_per_dollar' in joker_data:
+            money = game_state.get('money', 0)
+            return {'chips': joker_data['chips_per_dollar'] * money}
+            
+        # No effect triggered
+        return None
