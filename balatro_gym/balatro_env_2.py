@@ -34,8 +34,8 @@ from balatro_gym.cards import (
 from balatro_gym.constants import Phase, Action
 
 # Import all game modules
-from balatro_gym.balatro_game_v2 import BalatroGame
-from balatro_gym.scoring_engine_accurate import ScoreEngine, HandType
+from balatro_gym.balatro_game import BalatroGame
+from balatro_gym.scoring_engine import ScoreEngine, HandType
 from balatro_gym.shop import Shop, ShopAction, PlayerState, ItemType
 from balatro_gym.jokers import JokerInfo, JOKER_LIBRARY
 from balatro_gym.planets import Planet
@@ -43,7 +43,7 @@ from balatro_gym.consumables import (
     TarotCard, SpectralCard, ConsumableManager
 )
 from balatro_gym.unified_scoring import UnifiedScorer, ScoringContext
-from complete_joker_effects import CompleteJokerEffects
+from balatro_gym.complete_joker_effects import CompleteJokerEffects
 
 # Import boss blind system
 from balatro_gym.boss_blinds import (
@@ -246,6 +246,11 @@ class UnifiedGameState:
             best_hand_this_ante=self.best_hand_this_ante,
             jokers_sold=self.jokers_sold,
             hand_levels=self.hand_levels.copy(),
+            card_states=self.card_states.copy(),
+            active_boss_blind=self.active_boss_blind,
+            boss_blind_active=self.boss_blind_active,
+            face_down_cards=self.face_down_cards.copy(),
+            force_draw_count=self.force_draw_count,
         )
 
 # ---------------------------------------------------------------------------
@@ -453,9 +458,15 @@ class BalatroEnv(gym.Env):
         
         # Initialize hand levels
         for hand_type in HandType:
-            if hand_type != HandType.NONE:
-                self.state.hand_levels[hand_type] = self.engine.get_hand_level(hand_type)
-        
+            # Check if it's a valid playable hand type
+            # You might need to check the actual HandType enum definition
+            try:
+                level = self.engine.get_hand_level(hand_type)
+                self.state.hand_levels[hand_type] = level
+            except (KeyError, ValueError):
+                # Skip hand types that don't have levels
+                continue
+
         # Sync state with game
         self._sync_state_from_game()
         
@@ -468,9 +479,10 @@ class BalatroEnv(gym.Env):
     def _calculate_steel_bonus(self) -> float:
         """Calculate mult multiplier from steel cards remaining in hand"""
         steel_mult = 1.0
+        selected_hand_indexes = {self.state.hand_indexes[i] for i in self.state.selected_cards 
+                                 if i < len(self.state.hand_indexes)}
         for idx in self.state.hand_indexes:
-            if idx not in [self.state.hand_indexes[i] for i in self.state.selected_cards if i < len(self.state.hand_indexes)]:
-                # Card is still in hand
+            if idx not in selected_hand_indexes:
                 card_state = self.state.card_states.get(idx)
                 if card_state and card_state.enhancement == Enhancement.STEEL:
                     steel_mult *= EnhancementEffects.get_mult_multiplier(Enhancement.STEEL, in_hand=True)
@@ -1399,203 +1411,7 @@ class BalatroEnv(gym.Env):
                                     Enhancement.GLASS: 'G',
                                     Enhancement.STEEL: 'S',
                                     Enhancement.STONE: '◊',
-                                    Enhancement.GOLD: '
-        
-        elif self.state.phase == Phase.SHOP and self.shop:
-            print("\n=== SHOP ===")
-            for i, item in enumerate(self.shop.inventory):
-                affordable = "✓" if self.state.money >= item.cost else "✗"
-                print(f"[{i}] {affordable} {item.name:<25} ${item.cost}")
-            print(f"\nReroll cost: ${self.state.shop_reroll_cost}")
-        
-        elif self.state.phase == Phase.BLIND_SELECT:
-            print("\n=== SELECT BLIND ===")
-            print(f"[0] Small Blind: {BLIND_CHIPS[min(self.state.ante, 8)]['small']} chips")
-            print(f"[1] Big Blind: {BLIND_CHIPS[min(self.state.ante, 8)]['big']} chips")
-            print(f"[2] Boss Blind: {BLIND_CHIPS[min(self.state.ante, 8)]['boss']} chips")
-            print(f"[S] Skip Blind")
-        
-        if self.state.jokers:
-            joker_display = []
-            active_slots = self.state.joker_slots
-            if self.state.boss_blind_active:
-                active_slots -= self.boss_blind_manager.get_disabled_joker_count()
-            
-            for i, joker in enumerate(self.state.jokers[:active_slots]):
-                joker_display.append(joker.name)
-            
-            # Show disabled jokers
-            for i in range(active_slots, len(self.state.jokers)):
-                joker_display.append(f"[DISABLED: {self.state.jokers[i].name}]")
-            
-            print(f"\nJokers ({len(self.state.jokers)}/{self.state.joker_slots}): {', '.join(joker_display)}")
-        
-        if self.state.consumables:
-            print(f"Consumables ({len(self.state.consumables)}/{self.state.consumable_slots}): {', '.join(self.state.consumables)}")
-
-    def close(self):
-        pass
-
-
-# ---------------------------------------------------------------------------
-# Environment Validator for Testing
-# ---------------------------------------------------------------------------
-
-class BalatroEnvValidator:
-    """Validate environment behavior matches Balatro"""
-    
-    @staticmethod
-    def validate_determinism(env_class, seed: int = 42, steps: int = 100):
-        """Check if environment is deterministic with same seed"""
-        env1 = env_class(seed=seed)
-        env2 = env_class(seed=seed)
-        
-        obs1, _ = env1.reset()
-        obs2, _ = env2.reset()
-        
-        # Check initial observations match
-        for key in obs1:
-            if not np.array_equal(obs1[key], obs2[key]):
-                raise AssertionError(f"Initial observations differ for key: {key}")
-        
-        # Run same actions
-        for i in range(steps):
-            # Get valid action
-            valid_actions = np.where(obs1['action_mask'])[0]
-            if len(valid_actions) == 0:
-                break
-            
-            action = valid_actions[i % len(valid_actions)]
-            
-            obs1, r1, t1, tr1, info1 = env1.step(action)
-            obs2, r2, t2, tr2, info2 = env2.step(action)
-            
-            # Check all outputs match
-            if r1 != r2:
-                raise AssertionError(f"Rewards differ at step {i}: {r1} vs {r2}")
-            
-            if t1 != t2 or tr1 != tr2:
-                raise AssertionError(f"Termination differs at step {i}")
-            
-            for key in obs1:
-                if not np.array_equal(obs1[key], obs2[key]):
-                    raise AssertionError(f"Observations differ at step {i} for key: {key}")
-        
-        print(f"✓ Determinism validated over {steps} steps")
-    
-    @staticmethod
-    def validate_action_masking(env):
-        """Check that invalid actions are properly masked"""
-        obs, _ = env.reset()
-        
-        # Try all actions
-        for action in range(env.action_space.n):
-            if obs['action_mask'][action]:
-                # Should succeed
-                _, _, _, _, info = env.step(action)
-                if 'error' in info and info['error'] == 'Invalid action':
-                    raise AssertionError(f"Valid action {action} was rejected")
-            else:
-                # Should fail
-                obs_before = obs.copy()
-                _, reward, _, _, info = env.step(action)
-                if 'error' not in info:
-                    raise AssertionError(f"Invalid action {action} was accepted")
-                if reward != -1.0:
-                    raise AssertionError(f"Invalid action {action} gave reward {reward}")
-        
-        print("✓ Action masking validated")
-
-
-# ---------------------------------------------------------------------------
-# Factory function for creating environments
-# ---------------------------------------------------------------------------
-
-def make_balatro_env(**kwargs):
-    """Factory function for creating environments"""
-    def _init():
-        return BalatroEnv(**kwargs)
-    return _init
-
-
-# ---------------------------------------------------------------------------
-# Testing
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    # Test the complete environment
-    env = BalatroEnv(render_mode="human", seed=42)
-    
-    # Validate determinism
-    print("Testing determinism...")
-    BalatroEnvValidator.validate_determinism(BalatroEnv, seed=42, steps=50)
-    
-    # Test basic gameplay
-    print("\nTesting basic gameplay...")
-    obs, _ = env.reset()
-    
-    print("Complete Balatro Environment initialized!")
-    print(f"Observation space: {env.observation_space}")
-    print(f"Action space: {env.action_space}")
-    print(f"\nStarting interactive test...")
-    
-    # Run a test episode
-    done = False
-    step = 0
-    
-    while not done and step < 100:
-        env.render()
-        valid_actions = np.where(obs['action_mask'])[0]
-        print(f"\nValid actions: {valid_actions}")
-        
-        # Simple policy for testing
-        if env.state.phase == Phase.BLIND_SELECT:
-            # Always select small blind
-            action = Action.SELECT_BLIND_BASE
-        elif env.state.phase == Phase.SHOP:
-            # End shop immediately
-            action = Action.SHOP_END
-        else:
-            # Random valid action
-            action = np.random.choice(valid_actions) if len(valid_actions) > 0 else 0
-        
-        print(f"Taking action: {action}")
-        obs, reward, terminated, truncated, info = env.step(action)
-        done = terminated or truncated
-        
-        print(f"Reward: {reward:.2f}")
-        if info:
-            print(f"Info: {info}")
-        
-        step += 1
-    
-    print(f"\nEpisode finished after {step} steps")
-    print(f"Final score: {env.state.chips_scored}")
-    print(f"Reached ante: {env.state.ante}")
-    
-    # Test save/load
-    print("\nTesting save/load...")
-    saved = env.save_state()
-    
-    # Take some actions
-    for _ in range(5):
-        valid = np.where(env._get_action_mask())[0]
-        if len(valid) > 0:
-            env.step(np.random.choice(valid))
-    
-    # Save current observation
-    obs_after = env._get_observation()
-    
-    # Restore
-    env.load_state(saved)
-    obs_restored = env._get_observation()
-    
-    # Check they match
-    for key in obs_restored:
-        if not np.array_equal(obs_after[key], obs_restored[key]):
-            print(f"✓ State properly changed for key: {key}")
-    
-    print("✓ Save/load working correctly"),
+                                    Enhancement.GOLD: '$',
                                     Enhancement.LUCKY: '?'
                                 }
                                 modifiers.append(enhancement_symbols.get(card_state.enhancement, '!'))

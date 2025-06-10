@@ -11,8 +11,8 @@ from typing import List, Dict, Tuple, Optional, Any
 from dataclasses import dataclass
 from enum import IntEnum
 
-from balatro_gym.scoring_engine_accurate import ScoreEngine, HandType
-from complete_joker_effects import CompleteJokerEffects
+from balatro_gym.scoring_engine import ScoreEngine, HandType
+from .complete_joker_effects import CompleteJokerEffects
 
 # ---------------------------------------------------------------------------
 # Unified Effect Format
