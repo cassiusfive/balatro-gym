@@ -1,404 +1,205 @@
-"""Advanced training script optimized for HPC clusters with multi-GPU support"""
+#!/usr/bin/env python3
+"""Simple HPC training script for Balatro RL - Single GPU version"""
 
 import os
-import sys
 import argparse
-import json
 import time
 from pathlib import Path
 from datetime import datetime
-import subprocess
 
 import torch
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel
-
 from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize
+from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize, DummyVecEnv
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback, CallbackList
-from stable_baselines3.common.utils import set_random_seed
+from stable_baselines3.common.monitor import Monitor
 
-from balatro_gym.balatro_env_2 import BalatroEnv, make_balatro_env
+# Import your Balatro environment
+import sys
+sys.path.append(os.path.expanduser('~/balatro_rl_project'))
+from balatro_gym.envs.balatro_env_2 import BalatroEnv
 
 
-class HPCTrainer:
-    """Optimized trainer for HPC environments"""
+def make_env(rank: int, seed: int = 0):
+    """Create a single environment instance"""
+    def _init():
+        env = BalatroEnv(seed=seed + rank)
+        env = Monitor(env)
+        return env
+    return _init
+
+
+def train_balatro_hpc(args):
+    """Main training function for HPC"""
     
-    def __init__(self, args):
-        self.args = args
-        self.setup_distributed()
-        self.setup_directories()
-        
-    def setup_distributed(self):
-        """Setup distributed training if multiple GPUs available"""
-        if 'SLURM_PROCID' in os.environ:
-            self.rank = int(os.environ['SLURM_PROCID'])
-            self.world_size = int(os.environ['SLURM_NTASKS'])
-            self.gpu = self.rank % torch.cuda.device_count()
-            
-            # Initialize distributed backend
-            dist.init_process_group(
-                backend='nccl',
-                init_method='env://',
-                world_size=self.world_size,
-                rank=self.rank
-            )
-            
-            torch.cuda.set_device(self.gpu)
-            print(f"Process {self.rank}/{self.world_size} using GPU {self.gpu}")
-        else:
-            self.rank = 0
-            self.world_size = 1
-            self.gpu = 0 if torch.cuda.is_available() else None
+    # Setup directories
+    job_id = os.environ.get('SLURM_JOB_ID', 'local')
+    run_dir = Path(f"run_{job_id}")
+    run_dir.mkdir(exist_ok=True)
     
-    def setup_directories(self):
-        """Create necessary directories"""
-        self.run_dir = Path(f"run_{os.environ.get('SLURM_JOB_ID', 'local')}")
-        self.run_dir.mkdir(exist_ok=True)
-        
-        self.model_dir = self.run_dir / "models"
-        self.model_dir.mkdir(exist_ok=True)
-        
-        self.log_dir = self.run_dir / "logs"
-        self.log_dir.mkdir(exist_ok=True)
+    model_dir = run_dir / "models"
+    model_dir.mkdir(exist_ok=True)
     
-    def create_envs(self, n_envs: int, seed: int, rank_offset: int = 0):
-        """Create parallel environments optimized for HPC"""
-        def make_env(rank: int):
-            def _init():
-                env = BalatroEnv(seed=seed + rank + rank_offset)
-                # Add monitors and wrappers
-                return env
-            return _init
-        
+    log_dir = run_dir / "logs"
+    log_dir.mkdir(exist_ok=True)
+    
+    print(f"Starting Balatro RL Training")
+    print(f"Job ID: {job_id}")
+    print(f"Run directory: {run_dir}")
+    
+    # Check GPU availability
+    if torch.cuda.is_available():
+        print(f"GPU available: {torch.cuda.get_device_name(0)}")
+        device = 'cuda'
+    else:
+        print("No GPU available, using CPU")
+        device = 'cpu'
+    
+    # Create environments
+    print(f"\nCreating {args.n_envs} parallel environments...")
+    
+    if args.n_envs > 1:
         # Use SubprocVecEnv for true parallelism
-        envs = SubprocVecEnv([make_env(i) for i in range(n_envs)])
-        envs = VecNormalize(envs, norm_obs=True, norm_reward=True)
-        
-        return envs
+        env = SubprocVecEnv([make_env(i, args.seed) for i in range(args.n_envs)])
+    else:
+        # Use DummyVecEnv for single environment
+        env = DummyVecEnv([make_env(0, args.seed)])
     
-    def train(self):
-        """Main training loop optimized for HPC"""
-        if self.rank == 0:
-            print(f"Starting training on {self.world_size} processes")
-            print(f"Total environments: {self.args.n_envs * self.world_size}")
-            print(f"Total timesteps: {self.args.timesteps}")
-        
-        # Set seeds for reproducibility
-        seed = self.args.seed + self.rank * 1000
-        set_random_seed(seed)
-        
-        # Create environments
-        envs = self.create_envs(
-            self.args.n_envs, 
-            seed, 
-            rank_offset=self.rank * self.args.n_envs
+    # Add normalization wrapper
+    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
+    
+    # Create evaluation environment
+    eval_env = DummyVecEnv([make_env(1000, args.seed)])
+    eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False, clip_obs=10.0)
+    
+    # Create PPO model
+    print("\nInitializing PPO model...")
+    model = PPO(
+        "MultiInputPolicy",
+        env,
+        learning_rate=args.learning_rate,
+        n_steps=2048,
+        batch_size=args.batch_size,
+        n_epochs=10,
+        gamma=0.99,
+        gae_lambda=0.95,
+        clip_range=0.2,
+        ent_coef=0.01,
+        vf_coef=0.5,
+        max_grad_norm=0.5,
+        verbose=1,
+        tensorboard_log=str(log_dir / "tb_logs"),
+        device=device,
+        policy_kwargs={
+            "net_arch": [dict(pi=[512, 512], vf=[512, 512])]
+        }
+    )
+    
+    # Setup callbacks
+    callbacks = []
+    
+    # Checkpoint callback - save model periodically
+    checkpoint_callback = CheckpointCallback(
+        save_freq=max(args.checkpoint_freq // args.n_envs, 1),
+        save_path=str(model_dir / "checkpoints"),
+        name_prefix="balatro_ppo",
+        save_vecnormalize=True
+    )
+    callbacks.append(checkpoint_callback)
+    
+    # Evaluation callback - evaluate and save best model
+    eval_callback = EvalCallback(
+        eval_env,
+        best_model_save_path=str(model_dir / "best_model"),
+        log_path=str(log_dir / "eval"),
+        eval_freq=max(args.eval_freq // args.n_envs, 1),
+        n_eval_episodes=10,
+        deterministic=True,
+        render=False
+    )
+    callbacks.append(eval_callback)
+    
+    # Start training
+    print(f"\nStarting training for {args.timesteps:,} timesteps...")
+    print(f"This will generate approximately {args.timesteps // args.n_envs:,} episodes")
+    
+    start_time = time.time()
+    
+    try:
+        model.learn(
+            total_timesteps=args.timesteps,
+            callback=CallbackList(callbacks),
+            log_interval=10,
+            progress_bar=True,
+            reset_num_timesteps=False
         )
         
-        # Create model with optimized settings for HPC
-        device = f'cuda:{self.gpu}' if self.gpu is not None else 'cpu'
+        training_time = time.time() - start_time
+        print(f"\nTraining completed in {training_time/3600:.2f} hours")
+        print(f"Throughput: {args.timesteps/training_time:.2f} steps/second")
         
-        model = PPO(
-            "MultiInputPolicy",
-            envs,
-            learning_rate=3e-4,
-            n_steps=2048,
-            batch_size=256,  # Larger batch for GPU
-            n_epochs=10,
-            gamma=0.99,
-            gae_lambda=0.95,
-            clip_range=0.2,
-            ent_coef=0.01,
-            vf_coef=0.5,
-            max_grad_norm=0.5,
-            use_sde=False,
-            sde_sample_freq=-1,
-            tensorboard_log=str(self.log_dir) if self.rank == 0 else None,
-            verbose=1 if self.rank == 0 else 0,
-            device=device,
-            policy_kwargs={
-                "net_arch": [dict(pi=[512, 512], vf=[512, 512])],
-                "activation_fn": torch.nn.ReLU
-            }
-        )
+    except KeyboardInterrupt:
+        print("\nTraining interrupted by user")
+        training_time = time.time() - start_time
+    
+    except Exception as e:
+        print(f"\nError during training: {e}")
+        raise
+    
+    finally:
+        # Save final model
+        print("\nSaving final model...")
+        model.save(str(model_dir / "final_model"))
+        env.save(str(model_dir / "vec_normalize.pkl"))
         
-        # Setup callbacks (only on rank 0)
-        callbacks = []
-        if self.rank == 0:
-            checkpoint_callback = CheckpointCallback(
-                save_freq=50000,
-                save_path=str(self.model_dir),
-                name_prefix="balatro_ppo"
-            )
-            callbacks.append(checkpoint_callback)
-            
-            # Save best model
-            eval_env = self.create_envs(4, seed + 10000)
-            eval_callback = EvalCallback(
-                eval_env,
-                best_model_save_path=str(self.model_dir / "best"),
-                log_path=str(self.log_dir / "eval"),
-                eval_freq=10000,
-                deterministic=True,
-                render=False,
-                n_eval_episodes=10
-            )
-            callbacks.append(eval_callback)
+        # Save training summary
+        summary = {
+            "job_id": job_id,
+            "total_timesteps": args.timesteps,
+            "n_envs": args.n_envs,
+            "training_time_hours": training_time / 3600,
+            "throughput_steps_per_sec": args.timesteps / training_time if training_time > 0 else 0,
+            "device": device,
+            "completed": datetime.now().isoformat()
+        }
         
-        # Training loop with periodic synchronization
-        timesteps_per_process = self.args.timesteps // self.world_size
+        import json
+        with open(model_dir / "training_summary.json", "w") as f:
+            json.dump(summary, f, indent=2)
         
-        try:
-            start_time = time.time()
-            
-            model.learn(
-                total_timesteps=timesteps_per_process,
-                callback=CallbackList(callbacks) if callbacks else None,
-                log_interval=10 if self.rank == 0 else None,
-                progress_bar=self.rank == 0
-            )
-            
-            training_time = time.time() - start_time
-            
-            if self.rank == 0:
-                print(f"\nTraining completed in {training_time/3600:.2f} hours")
-                print(f"Throughput: {self.args.timesteps / training_time:.2f} steps/second")
-                
-                # Save final model
-                model.save(str(self.model_dir / "final_model"))
-                envs.save(str(self.model_dir / "vec_normalize.pkl"))
-                
-                # Save training config
-                config = {
-                    "args": vars(self.args),
-                    "world_size": self.world_size,
-                    "training_time": training_time,
-                    "throughput": self.args.timesteps / training_time,
-                    "timestamp": datetime.now().isoformat()
-                }
-                
-                with open(self.model_dir / "config.json", "w") as f:
-                    json.dump(config, f, indent=2)
+        print(f"\nAll models saved to: {model_dir}")
+        print("Training complete!")
         
-        finally:
-            envs.close()
-            if self.world_size > 1:
-                dist.destroy_process_group()
+        # Close environments
+        env.close()
+        eval_env.close()
 
 
-def run_hpc_training():
-    """Entry point for HPC training"""
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--timesteps", type=int, default=10_000_000)
-    parser.add_argument("--n-envs", type=int, default=16)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--checkpoint-freq", type=int, default=100_000)
-    parser.add_argument("--eval-freq", type=int, default=50_000)
+def main():
+    parser = argparse.ArgumentParser(description="Train Balatro RL agent on HPC")
+    parser.add_argument("--timesteps", type=int, default=10_000_000,
+                       help="Total timesteps to train")
+    parser.add_argument("--n-envs", type=int, default=16,
+                       help="Number of parallel environments")
+    parser.add_argument("--seed", type=int, default=42,
+                       help="Random seed")
+    parser.add_argument("--learning-rate", type=float, default=3e-4,
+                       help="Learning rate")
+    parser.add_argument("--batch-size", type=int, default=256,
+                       help="Batch size for PPO")
+    parser.add_argument("--checkpoint-freq", type=int, default=100_000,
+                       help="Save checkpoint every N steps")
+    parser.add_argument("--eval-freq", type=int, default=50_000,
+                       help="Evaluate every N steps")
     
     args = parser.parse_args()
     
-    # Detect HPC environment
-    if 'SLURM_JOB_ID' in os.environ:
-        print(f"Running on SLURM job {os.environ['SLURM_JOB_ID']}")
-        print(f"Node: {os.environ.get('SLURMD_NODENAME', 'unknown')}")
-        
-        # Log GPU info
-        if torch.cuda.is_available():
-            print(f"GPUs available: {torch.cuda.device_count()}")
-            for i in range(torch.cuda.device_count()):
-                print(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
+    # Print configuration
+    print("Configuration:")
+    for key, value in vars(args).items():
+        print(f"  {key}: {value}")
     
-    trainer = HPCTrainer(args)
-    trainer.train()
-
-
-# ---------------------------------------------------------------------------
-# Batch Job Submission Scripts
-# ---------------------------------------------------------------------------
-
-def generate_experiment_scripts():
-    """Generate multiple experiment configurations for batch submission"""
-    
-    experiments = [
-        # Baseline PPO
-        {
-            "name": "ppo_baseline",
-            "algorithm": "PPO",
-            "timesteps": 10_000_000,
-            "n_envs": 16,
-            "lr": 3e-4,
-            "batch_size": 64
-        },
-        # PPO with larger batch
-        {
-            "name": "ppo_large_batch",
-            "algorithm": "PPO", 
-            "timesteps": 10_000_000,
-            "n_envs": 32,
-            "lr": 3e-4,
-            "batch_size": 256
-        },
-        # PPO with curriculum
-        {
-            "name": "ppo_curriculum",
-            "algorithm": "PPO",
-            "timesteps": 10_000_000,
-            "n_envs": 16,
-            "lr": 3e-4,
-            "use_curriculum": True
-        },
-        # Different learning rates
-        {
-            "name": "ppo_lr_1e4",
-            "algorithm": "PPO",
-            "timesteps": 5_000_000,
-            "n_envs": 16,
-            "lr": 1e-4
-        },
-        {
-            "name": "ppo_lr_1e3",
-            "algorithm": "PPO",
-            "timesteps": 5_000_000,
-            "n_envs": 16,
-            "lr": 1e-3
-        }
-    ]
-    
-    # Create experiment directory
-    exp_dir = Path("experiments")
-    exp_dir.mkdir(exist_ok=True)
-    
-    # Generate individual job scripts
-    for exp in experiments:
-        script_content = f"""#!/bin/bash
-#SBATCH --job-name=balatro_{exp['name']}
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=32G
-#SBATCH --time=24:00:00
-#SBATCH --output=logs/{exp['name']}_%j.out
-#SBATCH --error=logs/{exp['name']}_%j.err
-
-source $HOME/balatro_env/bin/activate
-cd $HOME/balatro_rl_experiments
-
-python train_balatro_rl.py \\
-    --algorithm {exp['algorithm']} \\
-    --timesteps {exp['timesteps']} \\
-    --n-envs {exp['n_envs']} \\
-    --learning-rate {exp.get('lr', 3e-4)} \\
-    --save-name {exp['name']}
-"""
-        
-        script_path = exp_dir / f"{exp['name']}.sbatch"
-        with open(script_path, 'w') as f:
-            f.write(script_content)
-        
-        print(f"Generated: {script_path}")
-    
-    # Generate batch submission script
-    batch_script = """#!/bin/bash
-# Submit all experiments
-
-for script in experiments/*.sbatch; do
-    echo "Submitting $script"
-    sbatch $script
-    sleep 2
-done
-
-echo "All experiments submitted!"
-squeue -u $USER
-"""
-    
-    with open("submit_all_experiments.sh", "w") as f:
-        f.write(batch_script)
-    
-    os.chmod("submit_all_experiments.sh", 0o755)
-    print("\nGenerated submit_all_experiments.sh")
-    print("Run './submit_all_experiments.sh' to submit all experiments")
-
-
-# ---------------------------------------------------------------------------
-# Monitoring Script
-# ---------------------------------------------------------------------------
-
-def create_monitoring_script():
-    """Create a script to monitor training progress"""
-    
-    monitor_script = '''#!/usr/bin/env python3
-"""Monitor Balatro RL training progress on HPC"""
-
-import os
-import json
-import time
-from pathlib import Path
-from datetime import datetime
-import subprocess
-
-def get_job_status():
-    """Get current SLURM job status"""
-    result = subprocess.run(['squeue', '-u', os.environ['USER'], '-o', '%.18i %.9P %.8j %.8u %.2t %.10M %.6D %R'],
-                          capture_output=True, text=True)
-    print("Current Jobs:")
-    print(result.stdout)
-
-def monitor_training_progress():
-    """Monitor training logs and metrics"""
-    log_dirs = list(Path('.').glob('run_*/logs'))
-    
-    for log_dir in sorted(log_dirs):
-        run_id = log_dir.parent.name
-        print(f"\\n{'='*50}")
-        print(f"Run: {run_id}")
-        
-        # Check for latest checkpoint
-        checkpoints = list((log_dir.parent / 'models').glob('*.zip'))
-        if checkpoints:
-            latest = max(checkpoints, key=lambda p: p.stat().st_mtime)
-            print(f"Latest checkpoint: {latest.name}")
-            print(f"Modified: {datetime.fromtimestamp(latest.stat().st_mtime)}")
-        
-        # Check tensorboard logs
-        tb_dirs = list(log_dir.glob('**/events.out.tfevents.*'))
-        if tb_dirs:
-            print(f"TensorBoard logs: {len(tb_dirs)} files")
-        
-        # Check eval results
-        eval_log = log_dir / 'eval' / 'evaluations.npz'
-        if eval_log.exists():
-            import numpy as np
-            data = np.load(eval_log)
-            if 'results' in data:
-                results = data['results']
-                if len(results) > 0:
-                    latest_mean = results[-1].mean()
-                    print(f"Latest eval reward: {latest_mean:.2f}")
-
-if __name__ == "__main__":
-    while True:
-        os.system('clear')
-        print(f"Balatro RL Training Monitor - {datetime.now()}")
-        print("="*60)
-        
-        get_job_status()
-        monitor_training_progress()
-        
-        print(f"\\nRefreshing in 30 seconds... (Ctrl+C to exit)")
-        time.sleep(30)
-'''
-    
-    with open("monitor_training.py", "w") as f:
-        f.write(monitor_script)
-    
-    os.chmod("monitor_training.py", 0o755)
-    print("Created monitor_training.py")
+    train_balatro_hpc(args)
 
 
 if __name__ == "__main__":
-    # Generate experiment scripts
-    generate_experiment_scripts()
-    create_monitoring_script()
-    
-    # Run training if called directly
-    run_hpc_training()
+    main()
