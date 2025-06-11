@@ -19,6 +19,7 @@ from enum import Enum
 from dataclasses import dataclass, field
 import random
 import pickle
+import numpy as np
 
 import gymnasium as gym
 from gymnasium import spaces
@@ -514,7 +515,7 @@ class BalatroEnv(gym.Env):
             self.state.hand_indexes = self.game.hand_indexes
             self.state.hands_left = self.game.round_hands
             self.state.discards_left = self.game.round_discards
-            self.state.chips_scored = self.game.round_score
+           # self.state.chips_scored = self.game.round_score
 
     def _sync_state_to_game(self):
         """Sync game systems from unified state"""
@@ -719,8 +720,9 @@ class BalatroEnv(gym.Env):
                 
                 # Draw new cards
                 self.game._draw_cards()
-                self._sync_state_from_game()
-                
+                #self._sync_state_from_game()  # ← THIS IS RESETTING THE SCORE!
+
+                            
                 # Apply boss blind effects to newly drawn hand
                 if self.state.boss_blind_active and self.boss_blind_manager.active_blind:
                     hand_cards = [self.state.deck[i] for i in self.state.hand_indexes]
@@ -1063,7 +1065,9 @@ class BalatroEnv(gym.Env):
             # Transition to play
             self.state.phase = Phase.PLAY
             self._sync_state_from_game()
-            
+            self.game._draw_cards()       # Draw the initial hand ← THIS WAS MISSING!
+            self._sync_state_from_game()  # Sync FROM game to get the drawn cards
+
         elif action == Action.SKIP_BLIND:
             # Skip blind - trigger skip effects
             for joker in self.state.jokers:
@@ -1116,7 +1120,7 @@ class BalatroEnv(gym.Env):
         # Reset round stats
         self.state.best_hand_this_ante = 0
         self.state.hands_played_ante = 0
-        self.state.chips_scored = 0
+        #self.state.chips_scored = 0
         
         # Progress ante/round
         if self.state.round == 3:
@@ -1181,11 +1185,11 @@ class BalatroEnv(gym.Env):
         return bool(mask[action])
 
     def _get_action_mask(self):
-        """Get valid actions for current state"""
+        """Get valid actions for current state - FIXED VERSION"""
         mask = np.zeros(Action.ACTION_SPACE_SIZE, dtype=np.int8)
         
         if self.state.phase == Phase.PLAY:
-            # Card selection
+            # Card selection - allow selecting any card in hand
             for i in range(min(8, len(self.state.hand_indexes))):
                 mask[Action.SELECT_CARD_BASE + i] = 1
             
@@ -1203,12 +1207,12 @@ class BalatroEnv(gym.Env):
                 
         elif self.state.phase == Phase.SHOP:
             if self.shop:
-                # Buy items
+                # Buy items if can afford
                 for i in range(len(self.shop.inventory)):
                     if self.state.money >= self.shop.inventory[i].cost:
                         mask[Action.SHOP_BUY_BASE + i] = 1
                 
-                # Reroll
+                # Reroll if can afford
                 if self.state.money >= self.state.shop_reroll_cost:
                     mask[Action.SHOP_REROLL] = 1
             
@@ -1236,11 +1240,8 @@ class BalatroEnv(gym.Env):
                 hand_array[i] = CardAdapter.encode_to_int(self.state.deck[idx])
         
         # Get hand levels
-        hand_levels = []
         for hand_type in HandType:
-            if hand_type != HandType.NONE:
-                level = self.state.hand_levels.get(hand_type, 0)
-                hand_levels.append(level)
+                self.state.hand_levels[hand_type] = self.state.hand_levels.get(hand_type, 0)
         
         # Get consumable IDs
         consumable_ids = self._get_consumable_ids()
@@ -1274,8 +1275,7 @@ class BalatroEnv(gym.Env):
             'shop_costs': np.zeros(10, dtype=np.int16),
             'shop_rerolls': np.int16(self.state.shop_reroll_cost),
             
-            'hand_levels': np.array(hand_levels[:12], dtype=np.int8),
-            
+            'hand_levels': np.array(list(self.state.hand_levels.values())[:12], dtype=np.int8),            
             'phase': np.int8(self.state.phase),
             'action_mask': self._get_action_mask(),
             
