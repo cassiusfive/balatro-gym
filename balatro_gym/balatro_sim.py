@@ -1,24 +1,38 @@
+# balatro_sim.py - Refactored version
 import random
-import copy
-from complete_joker_effects import CompleteJokerEffects
+from typing import List, Dict, Optional, Tuple
+from dataclasses import dataclass
+
+from scoring_engine import ScoreEngine, HandType
+from balatro_gym.planets import Planet, PLANET_MULT
+from balatro_gym.jokers import JOKER_LIBRARY, JokerInfo
+from balatro_gym.shop import Shop, PlayerState, ShopAction
+from balatro_gym.complete_joker_effects import CompleteJokerEffects
+
+
+@dataclass
+class Card:
+    rank: int  # 2-14 (14 = Ace)
+    suit: str  # 'Spades', 'Hearts', 'Diamonds', 'Clubs'
+    base_value: int = 0
+    enhancement: Optional[str] = None
+    edition: Optional[str] = None
+    seal: Optional[str] = None
+
 
 class BalatroSimulator:
     def __init__(self):
-        # Planet cards (hand upgrades)
-        self.planets = {
-            'Mercury': 'Pair',
-            'Venus': 'Two Pair', 
-            'Earth': 'Full House',
-            'Mars': 'Four of a Kind',
-            'Jupiter': 'Flush',
-            'Saturn': 'Three of a Kind',
-            'Uranus': 'Straight',
-            'Neptune': 'Straight Flush',
-            'Pluto': 'High Card',
-            'Planet X': 'Five of a Kind',
-            'Ceres': 'Flush House',
-            'Eris': 'Flush Five'
-        }
+        # Core systems
+        self.score_engine = ScoreEngine()
+        self.joker_effects = CompleteJokerEffects()
+        
+        # Player state (managed by shop)
+        self.player_state = PlayerState(chips=100)
+        
+        # Game state
+        self.current_ante = 1
+        self.hands_played = 0
+        self.discards_remaining = 3
         
         # Tarot cards effects
         self.tarots = {
@@ -74,212 +88,26 @@ class BalatroSimulator:
             'purple': {'create_tarot_when_discarded': True}
         }
         
-        # Complete hand values (EXACT from Balatro)
-        self.base_hands = {
-            'Flush Five': {'chips': 160, 'mult': 16, 'l_chips': 50, 'l_mult': 3},
-            'Flush House': {'chips': 140, 'mult': 14, 'l_chips': 40, 'l_mult': 4},
-            'Five of a Kind': {'chips': 120, 'mult': 12, 'l_chips': 35, 'l_mult': 3},
-            'Straight Flush': {'chips': 100, 'mult': 8, 'l_chips': 40, 'l_mult': 4},
-            'Four of a Kind': {'chips': 60, 'mult': 7, 'l_chips': 30, 'l_mult': 3},
-            'Full House': {'chips': 40, 'mult': 4, 'l_chips': 25, 'l_mult': 2},
-            'Flush': {'chips': 35, 'mult': 4, 'l_chips': 15, 'l_mult': 2},
-            'Straight': {'chips': 30, 'mult': 4, 'l_chips': 30, 'l_mult': 3},
-            'Three of a Kind': {'chips': 30, 'mult': 3, 'l_chips': 20, 'l_mult': 2},
-            'Two Pair': {'chips': 20, 'mult': 2, 'l_chips': 20, 'l_mult': 1},
-            'Pair': {'chips': 10, 'mult': 2, 'l_chips': 15, 'l_mult': 1},
-            'High Card': {'chips': 5, 'mult': 1, 'l_chips': 10, 'l_mult': 1}
-        }
+        # Create joker name/ID mappings
+        self._create_joker_mappings()
         
-        # Initialize the complete joker effects system
-        self.joker_effects = CompleteJokerEffects()
+        # Register base joker modifiers
+        self._register_base_modifiers()
         
-        # Complete joker database from extracted code
-        self.jokers = {
-            # ===== BASIC JOKERS =====
-            'Joker': {'type': 'basic', 'effect': 'mult', 'value': 4},
-            'Greedy Joker': {'type': 'suit', 'suit': 'Diamonds', 'mult': 3},
-            'Lusty Joker': {'type': 'suit', 'suit': 'Hearts', 'mult': 3},
-            'Wrathful Joker': {'type': 'suit', 'suit': 'Spades', 'mult': 3},
-            'Gluttonous Joker': {'type': 'suit', 'suit': 'Clubs', 'mult': 3},
-            
-            # ===== HAND-TYPE JOKERS =====
-            'Jolly Joker': {'type': 'hand_type', 'hand': 'Pair', 'mult': 8},
-            'Zany Joker': {'type': 'hand_type', 'hand': 'Three of a Kind', 'mult': 12},
-            'Mad Joker': {'type': 'hand_type', 'hand': 'Two Pair', 'mult': 10},
-            'Crazy Joker': {'type': 'hand_type', 'hand': 'Straight', 'mult': 12},
-            'Droll Joker': {'type': 'hand_type', 'hand': 'Flush', 'mult': 10},
-            'Sly Joker': {'type': 'hand_type', 'hand': 'Pair', 'chips': 50},
-            'Wily Joker': {'type': 'hand_type', 'hand': 'Three of a Kind', 'chips': 100},
-            'Clever Joker': {'type': 'hand_type', 'hand': 'Two Pair', 'chips': 80},
-            'Devious Joker': {'type': 'hand_type', 'hand': 'Straight', 'chips': 100},
-            'Crafty Joker': {'type': 'hand_type', 'hand': 'Flush', 'chips': 80},
-            
-            # ===== INDIVIDUAL CARD EFFECTS =====
-            'Fibonacci': {'type': 'rank', 'ranks': [2, 3, 5, 8, 14], 'mult': 8},
-            'Scholar': {'type': 'rank', 'ranks': [14], 'chips': 20, 'mult': 4},
-            'Even Steven': {'type': 'even_odd', 'parity': 'even', 'mult': 4},
-            'Odd Todd': {'type': 'even_odd', 'parity': 'odd', 'chips': 31},
-            'Scary Face': {'type': 'face', 'chips': 30},
-            'Smiley Face': {'type': 'face', 'mult': 5},
-            'Walkie Talkie': {'type': 'rank', 'ranks': [4, 10], 'chips': 10, 'mult': 4},
-            'Triboulet': {'type': 'rank', 'ranks': [12, 13], 'x_mult': 2},
-            'Ancient Joker': {'type': 'special', 'effect': 'ancient_suit'},
-            'The Idol': {'type': 'special', 'effect': 'idol_card'},
-            'Photograph': {'type': 'special', 'effect': 'first_face'},
-            'Golden Ticket': {'type': 'enhancement', 'target': 'gold', 'money': 4},
-            'Rough Gem': {'type': 'suit', 'suit': 'Diamonds', 'money': 1},
-            'Arrowhead': {'type': 'suit', 'suit': 'Spades', 'chips': 50},
-            'Onyx Agate': {'type': 'suit', 'suit': 'Clubs', 'mult': 7},
-            'Bloodstone': {'type': 'suit', 'suit': 'Hearts', 'x_mult': 2, 'chance': 0.5},
-            
-            # ===== GROWING JOKERS =====
-            'Ride the Bus': {'type': 'growing', 'effect': 'no_face_mult'},
-            'Green Joker': {'type': 'growing', 'effect': 'hand_discard_mult'},
-            'Red Card': {'type': 'growing', 'effect': 'skip_mult'},
-            'Spare Trousers': {'type': 'growing', 'effect': 'two_pair_full_house'},
-            'Square Joker': {'type': 'growing', 'effect': 'four_cards'},
-            'Runner': {'type': 'growing', 'effect': 'straight_chips'},
-            'Flash Card': {'type': 'growing', 'effect': 'reroll_mult'},
-            'Wee Joker': {'type': 'growing', 'effect': 'twos_chips'},
-            'Ceremonial Dagger': {'type': 'growing', 'effect': 'destroy_joker'},
-            'Swashbuckler': {'type': 'growing', 'effect': 'sell_joker'},
-            
-            # ===== CONDITIONAL JOKERS =====
-            'Half Joker': {'type': 'conditional', 'condition': 'hand_size_3', 'mult': 20},
-            'Abstract Joker': {'type': 'conditional', 'condition': 'joker_count', 'mult_per': 3},
-            'Supernova': {'type': 'conditional', 'condition': 'hand_played_count'},
-            'Blue Joker': {'type': 'conditional', 'condition': 'deck_size', 'chips_per': 2},
-            'Banner': {'type': 'conditional', 'condition': 'discards_left', 'chips_per': 30},
-            'Mystic Summit': {'type': 'conditional', 'condition': 'no_discards', 'mult': 15},
-            'Acrobat': {'type': 'conditional', 'condition': 'final_hand', 'x_mult': 3},
-            'Bull': {'type': 'conditional', 'condition': 'money', 'chips_per': 2},
-            'Bootstraps': {'type': 'conditional', 'condition': 'money_5', 'mult_per': 2},
-            'Seeing Double': {'type': 'conditional', 'condition': 'clubs_other_suit', 'x_mult': 2},
-            'Flower Pot': {'type': 'conditional', 'condition': 'all_suits', 'x_mult': 3},
-            'Blackboard': {'type': 'conditional', 'condition': 'all_black_suits', 'x_mult': 3},
-            'Joker Stencil': {'type': 'conditional', 'condition': 'empty_joker_slots'},
-            'Driver\'s License': {'type': 'conditional', 'condition': '16_enhanced', 'x_mult': 3},
-            
-            # ===== UTILITY JOKERS =====
-            'Blueprint': {'type': 'utility', 'effect': 'copy_right'},
-            'Brainstorm': {'type': 'utility', 'effect': 'copy_leftmost'},
-            'Four Fingers': {'type': 'utility', 'effect': 'four_card_flush_straight'},
-            'Shortcut': {'type': 'utility', 'effect': 'skip_straight'},
-            'Smeared Joker': {'type': 'utility', 'effect': 'hearts_diamonds_same'},
-            'Pareidolia': {'type': 'utility', 'effect': 'all_face_cards'},
-            'Mime': {'type': 'utility', 'effect': 'retrigger_hand'},
-            'Sock and Buskin': {'type': 'utility', 'effect': 'retrigger_faces'},
-            'Hanging Chad': {'type': 'utility', 'effect': 'retrigger_first'},
-            'Hack': {'type': 'utility', 'effect': 'retrigger_2345'},
-            'Dusk': {'type': 'utility', 'effect': 'retrigger_final'},
-            
-            # ===== ECONOMIC JOKERS =====
-            'Trading Card': {'type': 'economic', 'effect': 'first_discard_single'},
-            'Business Card': {'type': 'economic', 'effect': 'face_money_chance'},
-            'Rough Gem': {'type': 'economic', 'effect': 'diamond_money'},
-            'Reserved Parking': {'type': 'economic', 'effect': 'face_money_chance_hand'},
-            'Mail-In Rebate': {'type': 'economic', 'effect': 'discard_rank_money'},
-            'Delayed Gratification': {'type': 'economic', 'effect': 'discard_money'},
-            'To Do List': {'type': 'economic', 'effect': 'specific_hand_money'},
-            'Faceless Joker': {'type': 'economic', 'effect': 'face_discard_money'},
-            'Matador': {'type': 'economic', 'effect': 'boss_ability_money'},
-            'Vagabond': {'type': 'economic', 'effect': 'poor_tarot'},
-            
-            # ===== DESTRUCTION/RISK JOKERS =====
-            'Popcorn': {'type': 'destruction', 'mult': 20, 'decay': 4},
-            'Turtle Bean': {'type': 'destruction', 'hand_size': -1, 'decay': 1},
-            'Ice Cream': {'type': 'destruction', 'chips': 100, 'decay': 10},
-            'Ramen': {'type': 'destruction', 'x_mult': 2.0, 'decay': 0.01},
-            'Gros Michel': {'type': 'destruction', 'mult': 15, 'destroy_chance': 1/6},
-            'Glass Joker': {'type': 'destruction', 'effect': 'glass_destroy_mult'},
-            'Caino': {'type': 'destruction', 'effect': 'face_destroy_mult'},
-            
-            # ===== LEGENDARY JOKERS =====
-            'The Family': {'type': 'legendary', 'hand': 'Four of a Kind', 'x_mult': 4},
-            'The Order': {'type': 'legendary', 'hand': 'Straight', 'x_mult': 3},
-            'The Tribe': {'type': 'legendary', 'hand': 'Flush', 'x_mult': 2},
-            'Chicot': {'type': 'legendary', 'effect': 'disable_boss'},
-            'Perkeo': {'type': 'legendary', 'effect': 'copy_consumable'},
-            'Mr. Bones': {'type': 'legendary', 'effect': 'save_25_percent'},
-            
-            # ===== SPECIAL JOKERS =====
-            'Invisible Joker': {'type': 'special', 'effect': 'copy_after_rounds'},
-            'Certificate': {'type': 'special', 'effect': 'add_enhanced_card'},
-            'DNA': {'type': 'special', 'effect': 'copy_single_card'},
-            'Marble Joker': {'type': 'special', 'effect': 'add_stone_card'},
-            'Vampire': {'type': 'special', 'effect': 'destroy_enhanced'},
-            'Midas Mask': {'type': 'special', 'effect': 'faces_to_gold'},
-            'Space Joker': {'type': 'special', 'effect': 'level_up_chance'},
-            'Obelisk': {'type': 'special', 'effect': 'most_played_hand'},
-            'Hologram': {'type': 'special', 'effect': 'playing_card_added'},
-            'Throwback': {'type': 'special', 'effect': 'skip_blind'},
-            'Campfire': {'type': 'special', 'effect': 'sell_card_mult'},
-            'Rocket': {'type': 'special', 'effect': 'boss_money_grow'},
-            'Satellite': {'type': 'special', 'effect': 'planet_money'},
-            'Constellation': {'type': 'special', 'effect': 'planet_mult'},
-            'Seance': {'type': 'special', 'effect': 'straight_flush_spectral'},
-            'Superposition': {'type': 'special', 'effect': 'ace_straight_tarot'},
-            'Sixth Sense': {'type': 'special', 'effect': 'destroy_6_spectral'},
-            
-            # ===== MORE JOKERS FROM EXTRACTED CODE =====
-            'Misprint': {'type': 'random', 'mult_min': 0, 'mult_max': 23},
-            'Stuntman': {'type': 'basic', 'chips': 250, 'hand_size': -1},
-            'Loyalty Card': {'type': 'special', 'effect': 'every_5th_hand', 'x_mult': 4},
-            'Card Sharp': {'type': 'conditional', 'condition': 'hand_played_twice', 'x_mult': 3},
-            'Cavendish': {'type': 'basic', 'x_mult': 3},
-            'Stone Joker': {'type': 'conditional', 'condition': 'stone_cards', 'chips_per': 25},
-            'Steel Joker': {'type': 'conditional', 'condition': 'steel_cards', 'x_mult_per': 0.2},
-            'Raised Fist': {'type': 'special', 'effect': 'lowest_rank_mult'},
-            'Chaos the Clown': {'type': 'utility', 'effect': 'free_rerolls'},
-            'Credit Card': {'type': 'special', 'effect': 'debt_money'},
-            'Ceremonial Dagger': {'type': 'growing', 'effect': 'destroy_right_joker'},
-            'Marble Joker': {'type': 'special', 'effect': 'add_stone_card_to_deck'},
-            '8 Ball': {'type': 'special', 'effect': 'create_tarot_on_8', 'chance': 0.25},
-            'Dusk': {'type': 'utility', 'effect': 'retrigger_final_hand'},
-            'Pareidolia': {'type': 'utility', 'effect': 'all_face_cards'},
-            'Hack': {'type': 'utility', 'effect': 'retrigger_low_cards'},
-            'Delayed Gratification': {'type': 'economic', 'effect': 'discard_money'},
-            'Baron': {'type': 'conditional', 'condition': 'king_in_hand', 'x_mult': 1.5},
-            'Shoot the Moon': {'type': 'conditional', 'condition': 'queen_in_hand', 'hand_mult': 13},
-            'Reserved Parking': {'type': 'economic', 'effect': 'face_hand_money'},
-            'Mail-In Rebate': {'type': 'economic', 'effect': 'discard_rank_money'},
-            'Hit the Road': {'type': 'growing', 'effect': 'jack_discard_mult'},
-            'Faceless Joker': {'type': 'economic', 'effect': 'face_discard_money'},
-            'Yorick': {'type': 'growing', 'effect': 'discard_counter_mult'},
-            'Castle': {'type': 'growing', 'effect': 'suit_discard_chips'},
-            'Satellite': {'type': 'economic', 'effect': 'planet_money'},
-            'Rocket': {'type': 'growing', 'effect': 'boss_money_growth'},
-            'Oops! All 6s': {'type': 'special', 'effect': 'double_probabilities'},
-            'Burglar': {'type': 'special', 'effect': 'trade_discards_hands'},
-            'Blackboard': {'type': 'conditional', 'condition': 'all_black_hand', 'x_mult': 3},
-            'Runner': {'type': 'growing', 'effect': 'straight_chip_growth'},
-            'Ice Cream': {'type': 'decaying', 'chips': 100, 'decay_per_hand': 10},
-            'Seltzer': {'type': 'decaying', 'retriggers': 1, 'uses': 10},
-            'Popcorn': {'type': 'decaying', 'mult': 20, 'decay_per_round': 4},
-            'Turtle Bean': {'type': 'decaying', 'hand_size': -1, 'decay_per_round': 1},
-            'Ramen': {'type': 'decaying', 'x_mult': 2.0, 'decay_per_discard': 0.01},
-            'Gros Michel': {'type': 'risky', 'mult': 15, 'destroy_chance': 1/6},
-            'Mr. Bones': {'type': 'safety', 'effect': 'save_at_25_percent'},
-            'Luchador': {'type': 'special', 'effect': 'disable_boss_when_sold'},
-            'Chicot': {'type': 'legendary', 'effect': 'disable_boss_blind'},
-            'Madness': {'type': 'growing', 'effect': 'destroy_joker_for_mult'},
-            'Riff-raff': {'type': 'special', 'effect': 'create_common_jokers'},
-            'Cartomancer': {'type': 'special', 'effect': 'create_tarot_blind'},
-            'Perkeo': {'type': 'legendary', 'effect': 'copy_random_consumable'},
-            'Certificate': {'type': 'special', 'effect': 'add_random_enhanced_card'},
-            'DNA': {'type': 'special', 'effect': 'copy_single_card_first_hand'},
-            'Sixth Sense': {'type': 'special', 'effect': 'destroy_6_for_spectral'},
-            'Seance': {'type': 'consumable', 'effect': 'straight_flush_spectral'},
-            'Superposition': {'type': 'consumable', 'effect': 'ace_straight_tarot'},
-            'Vagabond': {'type': 'economic', 'effect': 'poor_tarot_creation'},
-            'Constellation': {'type': 'growing', 'effect': 'planet_mult_growth'},
-            'Fortune Teller': {'type': 'conditional', 'effect': 'tarot_usage_mult'},
-            'Matador': {'type': 'economic', 'effect': 'boss_ability_money'},
-        }
+    def _create_joker_mappings(self):
+        """Map between joker IDs and names"""
+        self.joker_id_to_info = {j.id: j for j in JOKER_LIBRARY}
+        self.joker_name_to_id = {j.name: j.id for j in JOKER_LIBRARY}
+        
+    def _register_base_modifiers(self):
+        """Register permanent modifiers like Four Fingers"""
+        # This will be called to set up utility jokers
+        pass
 
-    def get_x_same(self, num, hand):
-        """Find cards of the same rank (from Balatro source)"""
-        vals = [[] for _ in range(15)]  # 14 ranks + 1 for indexing
+    # ===== HAND EVALUATION METHODS =====
+    def get_x_same(self, num: int, hand: List[Card]) -> List[List[Card]]:
+        """Find cards of the same rank"""
+        vals = [[] for _ in range(15)]
         
         for i in range(len(hand) - 1, -1, -1):
             curr = [hand[i]]
@@ -297,8 +125,8 @@ class BalatroSimulator:
         
         return ret
 
-    def get_flush(self, hand, four_fingers=False):
-        """Find flush (from Balatro source)"""
+    def get_flush(self, hand: List[Card], four_fingers: bool = False) -> List[List[Card]]:
+        """Find flush"""
         ret = []
         suits = ["Spades", "Hearts", "Clubs", "Diamonds"]
         required_cards = 4 if four_fingers else 5
@@ -320,8 +148,8 @@ class BalatroSimulator:
         
         return ret
 
-    def get_straight(self, hand, four_fingers=False, shortcut=False):
-        """Find straight (from Balatro source)"""
+    def get_straight(self, hand: List[Card], four_fingers: bool = False, shortcut: bool = False) -> List[List[Card]]:
+        """Find straight"""
         ret = []
         required_cards = 4 if four_fingers else 5
         
@@ -333,7 +161,7 @@ class BalatroSimulator:
         
         for card in hand:
             rank = card.rank
-            if 1 < rank < 15:  # Valid ranks
+            if 1 < rank < 15:
                 if rank in ids:
                     ids[rank].append(card)
                 else:
@@ -344,7 +172,7 @@ class BalatroSimulator:
         can_skip = shortcut
         skipped_rank = False
         
-        for i in range(14, 1, -1):  # Check from Ace down to 2
+        for i in range(14, 1, -1):
             if ids.get(i):
                 straight_length += 1
                 for card in ids[i]:
@@ -366,7 +194,7 @@ class BalatroSimulator:
             wheel_cards = []
             wheel_length = 0
             
-            for rank in [14, 2, 3, 4, 5]:  # A-2-3-4-5
+            for rank in [14, 2, 3, 4, 5]:
                 if ids.get(rank):
                     wheel_length += 1
                     wheel_cards.extend(ids[rank])
@@ -381,16 +209,16 @@ class BalatroSimulator:
                 straight = True
         
         if straight:
-            ret.append(t[:required_cards])  # Only return required number of cards
+            ret.append(t[:required_cards])
             
         return ret
 
-    def get_highest(self, hand):
+    def get_highest(self, hand: List[Card]) -> List[List[Card]]:
         """Get highest cards for high card hand"""
-        return [hand]  # Return all cards for high card evaluation
+        return [hand]
 
-    def evaluate_hand(self, cards):
-        """Use EXACT logic from poker_evaluation.txt"""
+    def evaluate_hand(self, cards: List[Card]) -> Dict:
+        """Evaluate poker hand"""
         results = {
             "Flush Five": [],
             "Flush House": [],
@@ -407,26 +235,32 @@ class BalatroSimulator:
             "top": None
         }
 
-        # Get all the parts using helper functions
+        # Check for utility jokers
+        four_fingers = any(self.joker_id_to_info[jid].name == "Four Fingers" 
+                          for jid in self.player_state.jokers)
+        shortcut = any(self.joker_id_to_info[jid].name == "Shortcut" 
+                      for jid in self.player_state.jokers)
+
+        # Get all the parts
         parts = {
             "_5": self.get_x_same(5, cards),
             "_4": self.get_x_same(4, cards),
             "_3": self.get_x_same(3, cards),
             "_2": self.get_x_same(2, cards),
-            "_flush": self.get_flush(cards),
-            "_straight": self.get_straight(cards),
+            "_flush": self.get_flush(cards, four_fingers),
+            "_straight": self.get_straight(cards, four_fingers, shortcut),
             "_highest": self.get_highest(cards)
         }
 
-        # Evaluate hands in priority order (from Balatro source)
+        # Evaluate hands in priority order
         
-        # Flush Five (5 of a kind + flush)
+        # Flush Five
         if parts["_5"] and parts["_flush"]:
             results["Flush Five"] = parts["_5"]
             if not results["top"]:
                 results["top"] = "Flush Five"
 
-        # Flush House (full house + flush)
+        # Flush House
         if parts["_3"] and parts["_2"] and parts["_flush"]:
             fh_hand = []
             fh_3 = parts["_3"][0]
@@ -448,11 +282,9 @@ class BalatroSimulator:
             _s, _f = parts["_straight"], parts["_flush"]
             ret = []
             
-            # Add flush cards
             for card in _f[0]:
                 ret.append(card)
             
-            # Add straight cards not in flush
             for card in _s[0]:
                 if card not in _f[0]:
                     ret.append(card)
@@ -521,7 +353,7 @@ class BalatroSimulator:
             if not results["top"]:
                 results["top"] = "High Card"
 
-        # Cascade lower hands (from Balatro source)
+        # Cascade lower hands
         if results["Five of a Kind"]:
             results["Four of a Kind"] = [results["Five of a Kind"][0][:4]]
 
@@ -533,294 +365,419 @@ class BalatroSimulator:
 
         return results
 
-    def apply_planet_card(self, planet_name, hand_levels):
-        """Apply planet card to upgrade hand level"""
-        hand_type = self.planets[planet_name]
-        hand_levels[hand_type] = hand_levels.get(hand_type, 1) + 1
-        return hand_levels
+    # ===== CONVERSION UTILITIES =====
+    def _card_to_id(self, card: Card) -> int:
+        """Convert card object to 0-51 ID"""
+        suit_map = {'Spades': 0, 'Hearts': 1, 'Diamonds': 2, 'Clubs': 3}
+        return suit_map[card.suit] * 13 + (card.rank - 2)
     
-    def apply_tarot_card(self, tarot_name, target_cards, game_state):
-        """Apply tarot card effects"""
-        effect = self.tarots[tarot_name]
-        
-        if tarot_name == 'The Magician':
-            # Enhance up to 2 cards to Lucky
-            for i, card in enumerate(target_cards[:2]):
-                card.enhancement = 'lucky'
-                
-        elif tarot_name == 'The Empress':
-            # Enhance up to 2 cards to Mult
-            for i, card in enumerate(target_cards[:2]):
-                card.enhancement = 'mult'
-                
-        elif tarot_name == 'The Emperor':
-            # Create 2-4 Tarot cards
-            game_state['consumables'].extend(['random_tarot'] * 3)
-            
-        elif tarot_name == 'The Hierophant':
-            # Enhance up to 2 cards to Bonus
-            for i, card in enumerate(target_cards[:2]):
-                card.enhancement = 'bonus'
-                
-        elif tarot_name == 'The Lovers':
-            # Enhance 1 card to Wild
-            if target_cards:
-                target_cards[0].enhancement = 'wild'
-                
-        elif tarot_name == 'The Chariot':
-            # Enhance 1 card to Steel
-            if target_cards:
-                target_cards[0].enhancement = 'steel'
-                
-        elif tarot_name == 'Strength':
-            # Increase rank of up to 2 cards by 1
-            for card in target_cards[:2]:
-                card.rank = min(14, card.rank + 1)
-                
-        elif tarot_name == 'The Hermit':
-            # Gain money equal to hand size
-            game_state['money'] += len(game_state['hand'])
-            
-        elif tarot_name == 'Wheel of Fortune':
-            # 1 in 4 chance to add foil, holo, or poly to random card
-            if random.random() < 0.25:
-                card = random.choice(target_cards)
-                card.edition = random.choice(['foil', 'holographic', 'polychrome'])
-                
-        elif tarot_name == 'Justice':
-            # Enhance 1 card to Glass
-            if target_cards:
-                target_cards[0].enhancement = 'glass'
-                
-        elif tarot_name == 'The Hanged Man':
-            # Destroy up to 2 cards, gain money
-            for card in target_cards[:2]:
-                game_state['money'] += 2
-                # Remove card from deck
-                
-        elif tarot_name == 'Death':
-            # Convert leftmost 2 cards to rightmost 2 cards
-            if len(target_cards) >= 4:
-                for i in range(2):
-                    target_cards[i].rank = target_cards[-(i+1)].rank
-                    target_cards[i].suit = target_cards[-(i+1)].suit
-                    
-        elif tarot_name == 'Temperance':
-            # Gain money equal to Joker sell values
-            for joker in game_state['jokers']:
-                game_state['money'] += joker.sell_value
-                
-        elif tarot_name == 'The Devil':
-            # Enhance 1 card to Gold
-            if target_cards:
-                target_cards[0].enhancement = 'gold'
-                
-        elif tarot_name == 'The Tower':
-            # Enhance 1 card to Stone
-            if target_cards:
-                target_cards[0].enhancement = 'stone'
-                
-        elif tarot_name == 'The Star':
-            # Convert up to 3 cards to Diamonds
-            for card in target_cards[:3]:
-                card.suit = 'Diamonds'
-                
-        elif tarot_name == 'The Moon':
-            # Convert up to 3 cards to Clubs  
-            for card in target_cards[:3]:
-                card.suit = 'Clubs'
-                
-        elif tarot_name == 'The Sun':
-            # Convert up to 3 cards to Hearts
-            for card in target_cards[:3]:
-                card.suit = 'Hearts'
-                
-        elif tarot_name == 'Judgement':
-            # Create random Planet card
-            game_state['consumables'].append(random.choice(list(self.planets.keys())))
-            
-        elif tarot_name == 'The World':
-            # Convert up to 3 cards to Spades
-            for card in target_cards[:3]:
-                card.suit = 'Spades'
-        
-        return game_state
+    def _id_to_card(self, card_id: int) -> Card:
+        """Convert 0-51 ID to card object"""
+        suits = ['Spades', 'Hearts', 'Diamonds', 'Clubs']
+        suit = suits[card_id // 13]
+        rank = (card_id % 13) + 2
+        return Card(rank=rank, suit=suit, base_value=rank if rank <= 10 else 10)
     
-    def calculate_card_effects(self, card, context):
-        """Calculate individual card enhancement/edition/seal effects"""
-        effect = {'chips': 0, 'mult': 0, 'x_mult': 1, 'money': 0, 'retriggers': 0}
-        
-        # Enhancement effects
-        if hasattr(card, 'enhancement') and card.enhancement:
-            enh = self.enhancements.get(card.enhancement, {})
-            effect['chips'] += enh.get('chips', 0)
-            effect['mult'] += enh.get('mult', 0)
-            effect['x_mult'] *= enh.get('x_mult', 1)
-            
-            if card.enhancement == 'glass' and context == 'scoring':
-                # Glass card X2 mult but 1/4 chance to destroy
-                if random.random() < 0.25:
-                    effect['destroy'] = True
-                    
-            elif card.enhancement == 'gold' and context == 'scoring':
-                effect['money'] += 3
-                
-            elif card.enhancement == 'lucky' and context == 'scoring':
-                if random.random() < 0.2:
-                    effect['money'] += 1
-                    
-        # Edition effects  
-        if hasattr(card, 'edition') and card.edition:
-            ed = self.editions.get(card.edition, {})
-            effect['chips'] += ed.get('chips', 0)
-            effect['mult'] += ed.get('mult', 0)
-            effect['x_mult'] *= ed.get('x_mult', 1)
-            
-        # Seal effects
-        if hasattr(card, 'seal') and card.seal:
-            seal = self.seals.get(card.seal, {})
-            if card.seal == 'red':
-                effect['retriggers'] += 1
-            elif card.seal == 'gold' and context == 'scoring':
-                effect['money'] += 3
-                
-        return effect
-    
-    def calculate_steel_joker_effect(self, steel_cards_count):
-        """Calculate Steel Joker effect based on steel cards in deck"""
-        if steel_cards_count > 0:
-            return {'x_mult': 1 + (0.2 * steel_cards_count)}
-        return None
-    
-    def calculate_stone_joker_effect(self, stone_cards_count):
-        """Calculate Stone Joker effect based on stone cards in deck"""
-        if stone_cards_count > 0:
-            return {'chips': 25 * stone_cards_count}
-        return None
+    def _hand_type_to_enum(self, hand_type_str: str) -> HandType:
+        """Convert hand type string to enum"""
+        mapping = {
+            'High Card': HandType.HIGH_CARD,
+            'Pair': HandType.ONE_PAIR,
+            'Two Pair': HandType.TWO_PAIR,
+            'Three of a Kind': HandType.THREE_KIND,
+            'Straight': HandType.STRAIGHT,
+            'Flush': HandType.FLUSH,
+            'Full House': HandType.FULL_HOUSE,
+            'Four of a Kind': HandType.FOUR_KIND,
+            'Straight Flush': HandType.STRAIGHT_FLUSH,
+            'Five of a Kind': HandType.FOUR_KIND,  # Treat as Four Kind
+            'Flush Five': HandType.STRAIGHT_FLUSH,  # Treat as SF
+            'Flush House': HandType.FULL_HOUSE      # Treat as FH
+        }
+        return mapping.get(hand_type_str, HandType.HIGH_CARD)
 
-    def calculate_score(self, cards, jokers, hand_levels, game_state=None):
-        """Updated scoring with complete joker system"""
+    # ===== SCORING =====
+
+
+    def calculate_score(self, cards: List[Card], game_state: Optional[Dict] = None) -> Tuple[int, Dict]:
+        """Calculate score using ScoreEngine and joker effects"""
         if game_state is None:
-            game_state = {'money': 0, 'deck': [], 'consumables': [], 'jokers': jokers}
-            
-        # 1. Evaluate hand type
+            game_state = self._create_game_state()
+        
+        # Evaluate hand type
         hand_result = self.evaluate_hand(cards)
-        hand_type = hand_result['top']
-        scoring_cards = hand_result[hand_type][0] if hand_result[hand_type] else []
+        hand_type_str = hand_result['top']
+        hand_type_enum = self._hand_type_to_enum(hand_type_str)
+        scoring_cards = hand_result[hand_type_str][0] if hand_result[hand_type_str] else []
         
-        # 2. Base scoring
-        base = self.base_hands[hand_type]
-        level = hand_levels.get(hand_type, 1)
+        # Get card IDs for scoring
+        card_ids = [self._card_to_id(card) for card in scoring_cards]
         
-        chips = base['chips'] + (level - 1) * base['l_chips']
-        mult = base['mult'] + (level - 1) * base['l_mult']
+        # Get base score from engine
+        level = 0  # Bronze level
+        base_score = self.score_engine.score(card_ids, hand_type_enum, level)
         
-        # 3. Card values and effects
+        print(f"DEBUG: Hand type: {hand_type_str} -> enum {hand_type_enum}")
+        print(f"DEBUG: Scoring cards: {len(scoring_cards)}")
+        print(f"DEBUG: Base score from engine: {base_score}")
+        
+        # Get base hand values
+        hand_base_values = {
+            'High Card': {'chips': 5, 'mult': 1},
+            'Pair': {'chips': 10, 'mult': 2},
+            'Two Pair': {'chips': 20, 'mult': 2},
+            'Three of a Kind': {'chips': 30, 'mult': 3},
+            'Straight': {'chips': 30, 'mult': 4},
+            'Flush': {'chips': 35, 'mult': 4},
+            'Full House': {'chips': 40, 'mult': 4},
+            'Four of a Kind': {'chips': 60, 'mult': 7},
+            'Straight Flush': {'chips': 100, 'mult': 8},
+            'Five of a Kind': {'chips': 120, 'mult': 12},
+            'Flush House': {'chips': 140, 'mult': 14},
+            'Flush Five': {'chips': 160, 'mult': 16}
+        }
+        
+        hand_values = hand_base_values.get(hand_type_str, {'chips': 5, 'mult': 1})
+        base_chips = hand_values['chips']
+        base_mult = hand_values['mult']
+        
+        # Add card face values to chips
         for card in scoring_cards:
-            chips += card.base_value
-            
-            # Individual card enhancements
-            card_effect = self.calculate_card_effects(card, 'scoring')
-            chips += card_effect['chips']
-            mult += card_effect['mult']
-            mult *= card_effect['x_mult']
-            game_state['money'] += card_effect['money']
+            base_chips += card.base_value
         
-        # 4. Apply joker effects using complete system
-        for joker in jokers:
-            # Before scoring effects
+        print(f"DEBUG: Base chips (hand + cards): {base_chips}")
+        print(f"DEBUG: Base mult: {base_mult}")
+        
+        # Track multipliers separately
+        total_add_mult = 0
+        total_mult_mult = 1.0
+        
+        # Apply card enhancements/editions/seals
+        for card in scoring_cards:
+            # Enhancement effects
+            if card.enhancement:
+                if card.enhancement == 'bonus':
+                    base_chips += 30
+                elif card.enhancement == 'mult':
+                    total_add_mult += 4
+                elif card.enhancement == 'glass':
+                    total_mult_mult *= 2.0
+                    if random.random() < 0.25:
+                        print(f"DEBUG: Glass card shattered!")
+                elif card.enhancement == 'steel':
+                    total_mult_mult *= 1.5
+                elif card.enhancement == 'stone':
+                    base_chips += 50
+                elif card.enhancement == 'gold':
+                    game_state['money'] += 3
+                elif card.enhancement == 'lucky' and random.random() < 0.2:
+                    game_state['money'] += 1
+                    
+            # Edition effects
+            if card.edition:
+                if card.edition == 'foil':
+                    base_chips += 50
+                elif card.edition == 'holographic':
+                    total_add_mult += 10
+                elif card.edition == 'polychrome':
+                    total_mult_mult *= 1.5
+                    
+            # Seal effects
+            if card.seal and card.seal == 'gold':
+                game_state['money'] += 3
+        
+        print(f"DEBUG: After card effects - Chips: {base_chips}, Add Mult: {total_add_mult}, Mult Mult: {total_mult_mult}")
+        
+        # Apply joker effects
+        for joker_id in self.player_state.jokers:
+            joker_info = self.joker_id_to_info[joker_id]
+            joker_obj = type('obj', (object,), {'name': joker_info.name})()
+            
+            # 1. Before scoring phase
             before_context = {
                 'phase': 'before_scoring',
                 'cards': cards,
                 'scoring_cards': scoring_cards,
-                'hand_type': hand_type
+                'hand_type': hand_type_str
             }
-            before_effect = self.joker_effects.apply_joker_effect(joker, before_context, game_state)
+            before_effect = self.joker_effects.apply_joker_effect(joker_obj, before_context, game_state)
+            if before_effect and 'message' in before_effect:
+                print(f"DEBUG: {joker_info.name} before scoring: {before_effect.get('message')}")
             
-            # Individual card effects
+            # 2. Individual card scoring phase
             for card in scoring_cards:
                 individual_context = {
                     'phase': 'individual_scoring',
                     'card': card,
                     'cards': cards,
                     'scoring_cards': scoring_cards,
-                    'hand_type': hand_type
+                    'hand_type': hand_type_str
                 }
-                individual_effect = self.joker_effects.apply_joker_effect(joker, individual_context, game_state)
+                individual_effect = self.joker_effects.apply_joker_effect(joker_obj, individual_context, game_state)
                 if individual_effect:
-                    chips += individual_effect.get('chips', 0)
-                    mult += individual_effect.get('mult', 0)
+                    base_chips += individual_effect.get('chips', 0)
+                    total_add_mult += individual_effect.get('mult', 0)
                     if 'x_mult' in individual_effect:
-                        mult *= individual_effect['x_mult']
+                        total_mult_mult *= individual_effect['x_mult']
                     game_state['money'] += individual_effect.get('money', 0)
+                    if individual_effect.get('chips', 0) > 0 or individual_effect.get('mult', 0) > 0:
+                        print(f"DEBUG: {joker_info.name} on {card.rank} of {card.suit}: +{individual_effect.get('chips', 0)} chips, +{individual_effect.get('mult', 0)} mult")
             
-            # Main scoring effects
+            # 3. Main scoring phase
             main_context = {
                 'phase': 'scoring',
                 'cards': cards,
                 'scoring_cards': scoring_cards,
-                'hand_type': hand_type
+                'hand_type': hand_type_str
             }
-            main_effect = self.joker_effects.apply_joker_effect(joker, main_context, game_state)
+            main_effect = self.joker_effects.apply_joker_effect(joker_obj, main_context, game_state)
             if main_effect:
-                chips += main_effect.get('chips', 0)
-                mult += main_effect.get('mult', 0)
+                print(f"DEBUG: Joker {joker_info.name} scoring effect: {main_effect}")
+                base_chips += main_effect.get('chips', 0)
+                total_add_mult += main_effect.get('mult', 0)
                 if 'x_mult' in main_effect:
-                    mult *= main_effect['x_mult']
+                    total_mult_mult *= main_effect['x_mult']
                 game_state['money'] += main_effect.get('money', 0)
         
-        # 5. Handle special joker effects that depend on deck composition
-        if game_state.get('deck'):
-            steel_count = sum(1 for card in game_state['deck'] if getattr(card, 'enhancement', None) == 'steel')
-            stone_count = sum(1 for card in game_state['deck'] if getattr(card, 'enhancement', None) == 'stone')
-            
-            # Steel Joker effect
-            steel_joker_effect = self.calculate_steel_joker_effect(steel_count)
-            if steel_joker_effect:
-                mult *= steel_joker_effect['x_mult']
-                
-            # Stone Joker effect  
-            stone_joker_effect = self.calculate_stone_joker_effect(stone_count)
-            if stone_joker_effect:
-                chips += stone_joker_effect['chips']
-                
-        return int(chips * mult), game_state
-    
-    def apply_joker_discard_effects(self, joker, discarded_cards, game_state):
-        """Handle joker effects when discarding"""
-        context = {
-            'phase': 'discard',
-            'discarded_cards': discarded_cards,
-            'last_discarded_card': discarded_cards[-1] if discarded_cards else None
+        # Calculate final score
+        final_mult = (base_mult + total_add_mult) * total_mult_mult
+        final_score = int(base_chips * final_mult)
+        
+        print(f"DEBUG: Final calculation: {base_chips} chips × {final_mult} mult = {final_score}")
+        
+        return final_score, game_state
+    def _create_game_state(self) -> Dict:
+        """Create game state dict"""
+        return {
+            'money': self.player_state.chips,
+            'deck': [self._id_to_card(cid) for cid in self.player_state.deck],
+            'consumables': [],
+            'jokers': [self.joker_id_to_info[jid].name for jid in self.player_state.jokers],
+            'ante': self.current_ante,
+            'hands_played': self.hands_played,
+            'discards_remaining': self.discards_remaining
         }
-        return self.joker_effects.apply_joker_effect(joker, context, game_state)
+
+    # ===== CONSUMABLES =====
+    def apply_planet_card(self, planet_name: str):
+        """Apply planet using the scoring engine"""
+        try:
+            planet_enum = Planet[planet_name.upper()]
+            self.score_engine.apply_consumable(planet_enum)
+        except KeyError:
+            print(f"Unknown planet: {planet_name}")
     
-    def apply_joker_end_round_effects(self, jokers, game_state):
+    def apply_tarot_card(self, tarot_name: str, target_cards: List[Card], game_state: Dict):
+        """Apply tarot card effects"""
+        effect = self.tarots.get(tarot_name)
+        
+        if tarot_name == 'The Magician':
+            for card in target_cards[:2]:
+                card.enhancement = 'lucky'
+                
+        elif tarot_name == 'The Empress':
+            for card in target_cards[:2]:
+                card.enhancement = 'mult'
+                
+        elif tarot_name == 'The Hierophant':
+            for card in target_cards[:2]:
+                card.enhancement = 'bonus'
+                
+        elif tarot_name == 'The Lovers':
+            if target_cards:
+                target_cards[0].enhancement = 'wild'
+                
+        elif tarot_name == 'The Chariot':
+            if target_cards:
+                target_cards[0].enhancement = 'steel'
+                
+        elif tarot_name == 'Justice':
+            if target_cards:
+                target_cards[0].enhancement = 'glass'
+                
+        elif tarot_name == 'The Devil':
+            if target_cards:
+                target_cards[0].enhancement = 'gold'
+                
+        elif tarot_name == 'The Tower':
+            if target_cards:
+                target_cards[0].enhancement = 'stone'
+                
+        elif tarot_name == 'Strength':
+            for card in target_cards[:2]:
+                card.rank = min(14, card.rank + 1)
+                
+        elif tarot_name == 'The Hermit':
+            game_state['money'] += len(game_state.get('hand', []))
+            
+        elif tarot_name == 'Wheel of Fortune':
+            if random.random() < 0.25 and target_cards:
+                card = random.choice(target_cards)
+                card.edition = random.choice(['foil', 'holographic', 'polychrome'])
+                
+        elif tarot_name == 'The Star':
+            for card in target_cards[:3]:
+                card.suit = 'Diamonds'
+                
+        elif tarot_name == 'The Moon':
+            for card in target_cards[:3]:
+                card.suit = 'Clubs'
+                
+        elif tarot_name == 'The Sun':
+            for card in target_cards[:3]:
+                card.suit = 'Hearts'
+                
+        elif tarot_name == 'The World':
+            for card in target_cards[:3]:
+                card.suit = 'Spades'
+        
+        return game_state
+
+    # ===== SHOP INTEGRATION =====
+    def run_shop_phase(self, ante: int) -> Dict:
+        """Run shop phase using the shop module"""
+        shop = Shop(ante, self.player_state)
+        shop_actions = []
+        
+        while True:
+            shop_obs = shop.get_observation()
+            
+            # This would be replaced with actual player/agent input
+            action = self._get_shop_action(shop_obs)
+            
+            reward, done, info = shop.step(action)
+            shop_actions.append((action, reward, info))
+            
+            if done:
+                break
+                
+            if "error" in info:
+                print(f"Shop error: {info['error']}")
+                
+        return {"actions": shop_actions}
+    
+    def _get_shop_action(self, shop_obs: Dict) -> int:
+        """Placeholder for getting shop action - would be from player/agent"""
+        # For now, just skip shop
+        return ShopAction.SKIP
+
+    # ===== GAME LOOP =====
+    def play_ante(self, ante_num: int) -> bool:
+        """Play one ante"""
+        self.current_ante = ante_num
+        blinds = ['small', 'big', 'boss']
+        
+        for blind_type in blinds:
+            # Calculate blind target
+            target_score = self._get_blind_target(blind_type, ante_num)
+            
+            # Play the blind
+            score = self._play_blind(target_score)
+            
+            if score >= target_score:
+                # Award money
+                reward = self._calculate_blind_reward(blind_type, ante_num)
+                self.player_state.chips += reward
+                
+                # Shop phase (except after ante 8 boss)
+                if not (ante_num == 8 and blind_type == 'boss'):
+                    self.run_shop_phase(ante_num)
+            else:
+                return False  # Game over
+                
+        return True  # Ante completed
+    
+    def _get_blind_target(self, blind_type: str, ante: int) -> int:
+        """Get score target for blind"""
+        base_scores = {
+            'small': 100,
+            'big': 200,
+            'boss': 350
+        }
+        multiplier = 1.5 ** (ante - 1)
+        return int(base_scores[blind_type] * multiplier)
+    
+    def _calculate_blind_reward(self, blind_type: str, ante: int) -> int:
+        """Calculate money reward for beating blind"""
+        base_rewards = {
+            'small': 3,
+            'big': 4,
+            'boss': 5
+        }
+        return base_rewards[blind_type] + ante
+    
+    def _play_blind(self, target_score: int) -> int:
+        """Placeholder for playing a blind - would involve actual gameplay"""
+        # For now, return a random score
+        return random.randint(50, 500)
+
+    # ===== DISCARD EFFECTS =====
+    def apply_joker_discard_effects(self, discarded_cards: List[Card], game_state: Dict):
+        """Handle joker effects when discarding"""
+        for joker_id in self.player_state.jokers:
+            joker_info = self.joker_id_to_info[joker_id]
+            
+            # Create joker object with name attribute
+            joker_obj = type('obj', (object,), {'name': joker_info.name})()
+            
+            context = {
+                'phase': 'discard',
+                'discarded_cards': discarded_cards,
+                'last_discarded_card': discarded_cards[-1] if discarded_cards else None
+            }
+            
+            effect = self.joker_effects.apply_joker_effect(
+                joker_obj,
+                context,
+                game_state
+            )
+            
+            if effect:
+                game_state['money'] += effect.get('money', 0)
+    # ===== END ROUND EFFECTS =====
+    def apply_joker_end_round_effects(self, game_state: Dict) -> List[Dict]:
         """Handle end-of-round joker effects"""
         effects = []
-        for joker in jokers:
+        
+        for joker_id in self.player_state.jokers:
+            joker_info = self.joker_id_to_info[joker_id]
+            
+            # Create joker object with name attribute
+            joker_obj = type('obj', (object,), {'name': joker_info.name})()
+            
             context = {'phase': 'end_round'}
-            effect = self.joker_effects.apply_joker_effect(joker, context, game_state)
+            effect = self.joker_effects.apply_joker_effect(
+                joker_obj,
+                context,
+                game_state
+            )
+            
             if effect:
                 effects.append(effect)
         
         # Handle destruction effects
-        effects.extend(self.joker_effects.end_of_round_effects(game_state))
+        destruction_effects = self.joker_effects.end_of_round_effects(game_state)
+        effects.extend(destruction_effects)
+        
         return effects
-    
-    def get_joker_info(self, joker_name):
+    # ===== UTILITY METHODS =====
+    def get_joker_info(self, joker_name: str) -> Dict:
         """Get information about a specific joker"""
-        return self.jokers.get(joker_name, {})
+        joker_id = self.joker_name_to_id.get(joker_name)
+        if joker_id:
+            return self.joker_id_to_info[joker_id].__dict__
+        return {}
     
-    def get_all_joker_names(self):
+    def get_all_joker_names(self) -> List[str]:
         """Get list of all implemented joker names"""
-        return list(self.jokers.keys())
+        return list(self.joker_name_to_id.keys())
+
 
 # Usage and testing
 if __name__ == "__main__":
     simulator = BalatroSimulator()
-    print(f"Total jokers implemented: {len(simulator.get_all_joker_names())}")
+    print(f"Total jokers available: {len(simulator.get_all_joker_names())}")
     print("\nFirst 10 jokers:")
     for joker_name in list(simulator.get_all_joker_names())[:10]:
         info = simulator.get_joker_info(joker_name)
-        print(f"  {joker_name}: {info}")
+        print(f"  {joker_name}: Cost ${info['base_cost']} - {info['effect']}")

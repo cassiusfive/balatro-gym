@@ -82,18 +82,31 @@ class BalatroTrajectoryGenerator:
     def __init__(self, simulator):
         self.simulator = simulator
         
+    def _setup_jokers(self, joker_names):
+        """Helper to set up jokers in the simulator's player state"""
+        self.simulator.player_state.jokers = []
+        for joker_name in joker_names:
+            joker_id = self.simulator.joker_name_to_id.get(joker_name)
+            if joker_id:
+                self.simulator.player_state.jokers.append(joker_id)
+                
+    def _apply_hand_levels(self, hand_levels):
+        """Helper to apply hand levels to score engine"""
+        # For now, we'll skip this as the score engine doesn't directly support it
+        # In a full implementation, you'd modify the score engine's tables
+        pass
+        
     def test_basic_scoring(self):
         """Test basic hand evaluation and scoring"""
         print("=== TESTING BASIC SCORING ===")
         
-    
-    # Test 1: High Card
+        # Test 1: High Card
         cards = [
-        Card(14, 'Hearts'),  # Ace
-        Card(12, 'Diamonds'),  # Queen  
-        Card(9, 'Clubs'),
-        Card(6, 'Spades'),
-        Card(3, 'Hearts')
+            Card(14, 'Hearts'),  # Ace
+            Card(12, 'Diamonds'),  # Queen  
+            Card(9, 'Clubs'),
+            Card(6, 'Spades'),
+            Card(3, 'Hearts')
         ]
     
         print(f"Testing with cards: {[(c.rank, c.suit) for c in cards]}")
@@ -103,17 +116,18 @@ class BalatroTrajectoryGenerator:
         print(f"Result type: {type(result)}")
     
         if result is None:
-           print("ERROR: evaluate_hand returned None!")
-           return
+            print("ERROR: evaluate_hand returned None!")
+            return
         
         if 'top' not in result:
-           print(f"ERROR: No 'top' key in result. Keys: {list(result.keys())}")
-           return
+            print(f"ERROR: No 'top' key in result. Keys: {list(result.keys())}")
+            return
         
         print(f"Hand: A♥ Q♦ 9♣ 6♠ 3♥")
         print(f"Detected: {result['top']}")
         print(f"Expected: High Card")
         print() 
+        
         # Test 2: Pair
         cards = [
             Card(9, 'Hearts'),
@@ -172,10 +186,10 @@ class BalatroTrajectoryGenerator:
             Card(3, 'Hearts')    # Fibonacci number
         ]
         
-        jokers = [Joker('Fibonacci')]
-        game_state = GameState()
+        # Set up Fibonacci joker
+        self._setup_jokers(['Fibonacci'])
         
-        score, _ = self.simulator.calculate_score(cards, jokers, game_state.hand_levels, game_state.__dict__)
+        score, _ = self.simulator.calculate_score(cards)
         print(f"Hand with Fibonacci joker: {score}")
         print(f"Cards: 5♥ 8♦ 10♣ 6♠ 3♥ (3 Fibonacci numbers)")
         print()
@@ -189,14 +203,17 @@ class BalatroTrajectoryGenerator:
             Card(3, 'Hearts')
         ]
         
-        jokers = [Joker('Scholar')]
-        score, _ = self.simulator.calculate_score(cards, jokers, game_state.hand_levels, game_state.__dict__)
+        self._setup_jokers(['Scholar'])
+        score, _ = self.simulator.calculate_score(cards)
         print(f"High Card with Scholar joker (Ace): {score}")
         print()
     
     def test_enhanced_cards(self):
         """Test card enhancements"""
         print("=== TESTING ENHANCED CARDS ===")
+        
+        # Clear jokers for this test
+        self._setup_jokers([])
         
         # Test steel card
         cards = [
@@ -207,14 +224,13 @@ class BalatroTrajectoryGenerator:
             Card(3, 'Hearts')
         ]
         
-        game_state = GameState()
-        score, _ = self.simulator.calculate_score(cards, [], game_state.hand_levels, game_state.__dict__)
+        score, _ = self.simulator.calculate_score(cards)
         print(f"High Card with Steel Ace: {score}")
         print()
         
         # Test glass card (risky!)
         cards[0].enhancement = 'glass'
-        score, _ = self.simulator.calculate_score(cards, [], game_state.hand_levels, game_state.__dict__)
+        score, _ = self.simulator.calculate_score(cards)
         print(f"High Card with Glass Ace: {score}")
         print()
     
@@ -230,12 +246,12 @@ class BalatroTrajectoryGenerator:
             discards_left=2
         )
         
-        # Add some jokers
-        game_state.jokers = [
-            Joker('Joker'),  # +4 mult
-            Joker('Even Steven'),  # +4 mult for even cards
-            Joker('Blue Joker')  # +2 chips per remaining deck card
-        ]
+        # Set up jokers
+        joker_names = ['Joker', 'Even Steven', 'Blue Joker']
+        self._setup_jokers(joker_names)
+        
+        # Update simulator's money
+        self.simulator.player_state.chips = game_state.money
         
         # Create hand
         cards = [
@@ -246,17 +262,14 @@ class BalatroTrajectoryGenerator:
             Card(2, 'Hearts')    # Even for Even Steven
         ]
         
-        # Upgrade some hands with planets
-        game_state.hand_levels['Pair'] = 3  # Upgraded with planets
+        # Add deck cards for Blue Joker effect
+        self.simulator.player_state.deck = [i for i in range(52)]  # Card IDs
         
-        score, updated_state = self.simulator.calculate_score(
-            cards, game_state.jokers, game_state.hand_levels, game_state.__dict__
-        )
+        score, updated_state = self.simulator.calculate_score(cards)
         
         print(f"Complete game score: {score}")
-        print(f"Jokers: {[j.name for j in game_state.jokers]}")
-        print(f"Hand levels: Pair level {game_state.hand_levels['Pair']}")
-        print(f"Deck size: {len(game_state.deck)} cards")
+        print(f"Jokers: {joker_names}")
+        print(f"Deck size: {len(self.simulator.player_state.deck)} cards")
         print()
     
     def generate_single_trajectory(self, max_actions=50):
@@ -266,6 +279,10 @@ class BalatroTrajectoryGenerator:
         trajectory = []
         game_state = GameState()
         game_state.draw_hand(8)
+        
+        # Sync with simulator
+        self.simulator.player_state.chips = game_state.money
+        self._setup_jokers([j.name for j in game_state.jokers])
         
         action_count = 0
         
@@ -380,10 +397,12 @@ class BalatroTrajectoryGenerator:
             # Play selected cards
             played_cards = [next_state.hand[i] for i in action['card_indices']]
             
+            # Sync jokers with simulator
+            self._setup_jokers([j.name for j in next_state.jokers])
+            self.simulator.player_state.chips = next_state.money
+            
             # Calculate score
-            score, updated_game_state = self.simulator.calculate_score(
-                played_cards, next_state.jokers, next_state.hand_levels, next_state.__dict__
-            )
+            score, updated_game_state = self.simulator.calculate_score(played_cards)
             
             next_state.score += score
             next_state.money = updated_game_state.get('money', next_state.money)
