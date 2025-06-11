@@ -63,6 +63,16 @@ BLIND_CHIPS = {
     8: {'small': 5250, 'big': 7875, 'boss': 10500},
 }
 
+def get_blind_chips(ante: int, blind_type: str) -> int:
+    """Get blind chip requirement for any ante level"""
+    if ante <= 8:
+        return BLIND_CHIPS[ante][blind_type]
+    else:
+        # Exponential scaling after ante 8
+        base = BLIND_CHIPS[8][blind_type]
+        multiplier = 1.5 ** (ante - 8)
+        return int(base * multiplier)
+
 # Create joker mappings from JOKER_LIBRARY
 JOKER_ID_TO_NAME = {joker.id: joker.name for joker in JOKER_LIBRARY}
 JOKER_NAME_TO_ID = {joker.name: joker.id for joker in JOKER_LIBRARY}
@@ -161,6 +171,7 @@ class UnifiedGameState:
     phase: Phase = Phase.BLIND_SELECT
     chips_needed: int = 300
     chips_scored: int = 0
+    round_chips_scored: int = 0  # Chips scored in current round only
     money: int = 4
     
     # Cards and hands
@@ -218,6 +229,7 @@ class UnifiedGameState:
             'consumable_slots': self.consumable_slots,
             'hands_played': self.hands_played_total,
             'hands_played_ante': self.hands_played_ante,
+            'round_chips_scored': self.round_chips_scored,
         }
     
     def copy(self) -> 'UnifiedGameState':
@@ -228,6 +240,7 @@ class UnifiedGameState:
             phase=self.phase,
             chips_needed=self.chips_needed,
             chips_scored=self.chips_scored,
+            round_chips_scored=self.round_chips_scored,
             money=self.money,
             deck=self.deck.copy() if self.deck else [],
             hand_indexes=self.hand_indexes.copy(),
@@ -379,14 +392,16 @@ class BalatroEnv(gym.Env):
             'deck_size': spaces.Box(0, 52, (), dtype=np.int8),
             'selected_cards': spaces.MultiBinary(8),
             
-            # Scoring state
-            'chips_scored': spaces.Box(0, 1_000_000, (), dtype=np.int32),
+            # Scoring state - FIXED: Use int64 for large scores
+            'chips_scored': spaces.Box(0, 10_000_000_000, (), dtype=np.int64),  # Changed to int64
+            'round_chips_scored': spaces.Box(0, 10_000_000, (), dtype=np.int32),
+            'progress_ratio': spaces.Box(0.0, 2.0, (), dtype=np.float32),
             'mult': spaces.Box(0, 10_000, (), dtype=np.int32),
-            'chips_needed': spaces.Box(0, 100_000, (), dtype=np.int32),
+            'chips_needed': spaces.Box(0, 10_000_000, (), dtype=np.int32),  # Increased range
             'money': spaces.Box(-20, 999, (), dtype=np.int32),
             
-            # Round state
-            'ante': spaces.Box(1, 20, (), dtype=np.int8),
+            # Round state - FIXED: Use larger types
+            'ante': spaces.Box(1, 1000, (), dtype=np.int16),  # Changed to int16
             'round': spaces.Box(1, 3, (), dtype=np.int8),
             'hands_left': spaces.Box(0, 12, (), dtype=np.int8),
             'discards_left': spaces.Box(0, 10, (), dtype=np.int8),
@@ -414,15 +429,79 @@ class BalatroEnv(gym.Env):
             'action_mask': spaces.MultiBinary(Action.ACTION_SPACE_SIZE),
             
             # Stats for reward shaping
-            'hands_played': spaces.Box(0, 1000, (), dtype=np.int16),
-            'best_hand_this_ante': spaces.Box(0, 1_000_000, (), dtype=np.int32),
+            'hands_played': spaces.Box(0, 10000, (), dtype=np.int32),  # Increased range
+            'best_hand_this_ante': spaces.Box(0, 10_000_000, (), dtype=np.int32),  # Increased range
             
             # Boss blind info
             'boss_blind_active': spaces.Box(0, 1, (), dtype=np.int8),
-            'boss_blind_type': spaces.Box(0, 30, (), dtype=np.int8),  # BossBlindType enum value
-            'face_down_cards': spaces.MultiBinary(8),  # Which cards in hand are face down
-        })
+            'boss_blind_type': spaces.Box(0, 30, (), dtype=np.int8),
+            'face_down_cards': spaces.MultiBinary(8),
+                    # ADD: Better hand representation
+            'hand_one_hot': spaces.Box(0, 1, (8, 52), dtype=np.float32),  # One-hot encoding of cards
+            'hand_suits': spaces.Box(0, 4, (8,), dtype=np.int8),  # Suit counts per position
+            'hand_ranks': spaces.Box(0, 13, (8,), dtype=np.int8),  # Rank values per position
+            
+            # ADD: Hand potential analysis
+            'rank_counts': spaces.Box(0, 4, (13,), dtype=np.int8),  # How many of each rank in hand
+            'suit_counts': spaces.Box(0, 8, (4,), dtype=np.int8),   # How many of each suit in hand
+            'straight_potential': spaces.Box(0, 1, (), dtype=np.float32),  # Probability of making straight
+            'flush_potential': spaces.Box(0, 1, (), dtype=np.float32),     # Probability of making flush
+            
+            # ADD: Historical context
+            'avg_score_per_hand': spaces.Box(0, 10000, (), dtype=np.float32),
+            'hands_until_shop': spaces.Box(0, 20, (), dtype=np.int8),
+            'rounds_until_boss': spaces.Box(0, 3, (), dtype=np.int8),
+            
+            # ADD: Joker synergy indicators
+            'has_mult_jokers': spaces.Box(0, 1, (), dtype=np.int8),
+            'has_chip_jokers': spaces.Box(0, 1, (), dtype=np.int8),
+            'has_xmult_jokers': spaces.Box(0, 1, (), dtype=np.int8),
+            'has_economy_jokers': spaces.Box(0, 1, (), dtype=np.int8),
+            'hand_potential_scores': spaces.Box(0, 10000, (12,), dtype=np.int32),  # Expected score for each hand type
+            'joker_synergy_score': spaces.Box(0, 10, (), dtype=np.float32),
+            'risk_level': spaces.Box(0, 1, (), dtype=np.float32),  # How close to losing
+            'economy_health': spaces.Box(0, 1, (), dtype=np.float32),  # Money relative to needs
 
+
+            # ADD: Risk indicators
+            'blind_difficulty': spaces.Box(0, 1, (), dtype=np.float32),  # Normalized difficulty
+            'win_probability': spaces.Box(0, 1, (), dtype=np.float32),   # Estimated win chance
+
+        })
+    def _calculate_hand_features(self, hand_cards: List[Card]) -> Dict[str, np.ndarray]:
+        """Calculate advanced hand features for better decision making"""
+        features = {}
+        
+        rank_counts = np.zeros(13, dtype=np.int8)
+        suit_counts = np.zeros(4, dtype=np.int8)
+        
+        for card in hand_cards:
+            if card:
+                rank_counts[card.rank.value - 2] += 1
+                suit_counts[card.suit.value] += 1
+        
+        features['rank_counts'] = rank_counts
+        features['suit_counts'] = suit_counts
+        
+        # Straight potential (simplified)
+        consecutive = 0
+        max_consecutive = 0
+        sorted_ranks = sorted(set(card.rank.value for card in hand_cards if card))
+        
+        for i in range(1, len(sorted_ranks)):
+            if sorted_ranks[i] - sorted_ranks[i-1] == 1:
+                consecutive += 1
+                max_consecutive = max(max_consecutive, consecutive)
+            else:
+                consecutive = 0
+        
+        features['straight_potential'] = min(1.0, max_consecutive / 4.0)
+        
+        # Flush potential
+        max_suit = max(suit_counts)
+        features['flush_potential'] = min(1.0, max_suit / 5.0)
+        
+        return features
     def reset(self, *, seed: int | None = None, options: dict | None = None):
         """Reset the environment to initial state"""
         if seed is not None:
@@ -431,6 +510,7 @@ class BalatroEnv(gym.Env):
         
         # Reset state
         self.state = UnifiedGameState()
+        self.state.round_chips_scored = 0  # Initialize round score
         
         # Initialize core game systems with RNG
         self.engine = ScoreEngine()
@@ -511,11 +591,18 @@ class BalatroEnv(gym.Env):
     def _sync_state_from_game(self):
         """Sync unified state from game systems"""
         if self.game:
+            # Preserve scoring state
+            current_total_score = self.state.chips_scored
+            current_round_score = self.state.round_chips_scored
+            
             self.state.deck = self.game.deck
             self.state.hand_indexes = self.game.hand_indexes
             self.state.hands_left = self.game.round_hands
             self.state.discards_left = self.game.round_discards
-           # self.state.chips_scored = self.game.round_score
+            
+            # Restore scoring state
+            self.state.chips_scored = current_total_score
+            self.state.round_chips_scored = current_round_score
 
     def _sync_state_to_game(self):
         """Sync game systems from unified state"""
@@ -528,6 +615,13 @@ class BalatroEnv(gym.Env):
 
     def step(self, action: int):
         """Execute action and return step results"""
+        # Check for termination conditions
+        if self.state.ante > 100:  # Terminate after ante 100
+            return self._get_observation(), 0.0, True, False, {'terminated': 'max_ante_reached'}
+        
+        if self.state.chips_scored > 1_000_000_000:  # Terminate if score gets too high
+            return self._get_observation(), 0.0, True, False, {'terminated': 'max_score_reached'}
+        
         # Validate action
         if not self._is_valid_action(action):
             return self._get_observation(), -1.0, False, False, {'error': 'Invalid action'}
@@ -543,7 +637,7 @@ class BalatroEnv(gym.Env):
             return self._step_pack_open(action)
 
     def _step_play(self, action: int):
-        """Handle playing phase actions with unified scoring"""
+        """Handle playing phase actions with unified scoring and enhanced reward shaping"""
         reward = 0.0
         terminated = False
         info = {}
@@ -677,7 +771,12 @@ class BalatroEnv(gym.Env):
                 # Mark card as destroyed (would need proper implementation)
                 pass
             
-            # Update state
+            # Store old values for reward calculation
+            old_round_score = self.state.round_chips_scored
+            old_progress = min(1.0, old_round_score / max(1, self.state.chips_needed))
+            
+            # Update state - add to ROUND score
+            self.state.round_chips_scored += final_score
             self.state.chips_scored += final_score
             self.state.hands_played_total += 1
             self.state.hands_played_ante += 1
@@ -697,21 +796,131 @@ class BalatroEnv(gym.Env):
             # Clear selection
             self.state.selected_cards = []
             
-            # Calculate reward
-            progress = self.state.chips_scored / self.state.chips_needed
-            reward = 10 * progress + (final_score / 1000)
+            # ===== ENHANCED REWARD SHAPING =====
+            # Calculate progress
+            new_progress = min(1.0, self.state.round_chips_scored / max(1, self.state.chips_needed))
+            
+            # 1. Progress-based reward (most important)
+            progress_reward = 15.0 * new_progress
+            
+            # 2. Milestone bonuses for crossing thresholds
+            milestone_reward = 0.0
+            if old_progress < 0.25 <= new_progress:
+                milestone_reward = 5.0
+            elif old_progress < 0.5 <= new_progress:
+                milestone_reward = 10.0
+            elif old_progress < 0.75 <= new_progress:
+                milestone_reward = 15.0
+            elif old_progress < 1.0 <= new_progress:
+                milestone_reward = 25.0
+            
+            # 3. Score component with ante-based scaling
+            if self.state.ante <= 3:
+                score_reward = min(10.0, final_score / 100.0)  # Early game: linear scaling
+            else:
+                score_reward = min(10.0, 3.0 * np.log10(max(1, final_score)))  # Late game: log scaling
+            
+            # 4. Hand quality bonus
+            hand_quality_values = {
+                HandType.HIGH_CARD: 0.1,
+                HandType.ONE_PAIR: 0.5,
+                HandType.TWO_PAIR: 1.0,
+                HandType.THREE_KIND: 2.0,
+                HandType.STRAIGHT: 2.5,
+                HandType.FLUSH: 2.5,
+                HandType.FULL_HOUSE: 3.5,
+                HandType.FOUR_KIND: 5.0,
+                HandType.STRAIGHT_FLUSH: 7.0,
+                HandType.FIVE_KIND: 10.0
+            }
+            hand_quality_reward = hand_quality_values.get(hand_type, 0.0)
+            
+            # 5. Efficiency bonus (using fewer cards for strong hands)
+            efficiency_reward = 0.0
+            cards_played = len(selected_game_cards)
+            if hand_type >= HandType.THREE_KIND and cards_played <= 3:
+                efficiency_reward = 2.0
+            elif hand_type >= HandType.FLUSH and cards_played == 5:
+                efficiency_reward = 1.0
+            elif cards_played <= 4 and self.state.hands_left <= 2:
+                efficiency_reward = 1.5  # Conservative play when low on hands
+            
+            # 6. Joker synergy bonus
+            synergy_reward = 0.0
+            joker_names = [j.name for j in self.state.jokers]
+            
+            # Check for flush synergies
+            if hand_type == HandType.FLUSH and any(name in ['Smeared Joker', 'Four Fingers', 'Shortcut'] for name in joker_names):
+                synergy_reward += 2.0
+            
+            # Check for pair/set synergies
+            if hand_type in [HandType.ONE_PAIR, HandType.TWO_PAIR, HandType.THREE_KIND]:
+                if any(name in ['Odd Todd', 'Even Steven', 'Jolly Joker', 'Zany Joker'] for name in joker_names):
+                    synergy_reward += 1.5
+            
+            # Check for face card synergies
+            face_cards = sum(1 for c in selected_game_cards if c.rank.value >= 11)
+            if face_cards > 0 and any(name in ['Scary Face', 'Smiley Face', 'Business Card'] for name in joker_names):
+                synergy_reward += 0.5 * face_cards
+            
+            # 7. Strategic play bonus
+            strategy_reward = 0.0
+            if new_progress > 0.7 and self.state.hands_left >= 3:
+                strategy_reward = 2.0  # Saving resources when ahead
+            elif new_progress < 0.3 and hand_type >= HandType.FLUSH:
+                strategy_reward = 3.0  # Using strong hands when behind
+            
+            # 8. Ante progression bonus
+            if self.state.ante >= 4:
+                ante_bonus = min(5.0, (self.state.ante - 3) * 0.5)
+            else:
+                ante_bonus = 0.0
+            
+            # Combine all reward components
+            reward = (
+                progress_reward +
+                milestone_reward +
+                score_reward +
+                hand_quality_reward * 2.0 +  # Weight hand quality
+                efficiency_reward * 1.5 +      # Weight efficiency
+                synergy_reward * 3.0 +         # Weight synergies highly
+                strategy_reward * 2.0 +        # Weight strategy
+                ante_bonus
+            )
+            
+            # Cap total reward
+            reward = min(reward, 100.0)
+            
+            # Add detailed breakdown to info
+            info['reward_breakdown'] = {
+                'progress': progress_reward,
+                'milestone': milestone_reward,
+                'score': score_reward,
+                'hand_quality': hand_quality_reward,
+                'efficiency': efficiency_reward,
+                'synergy': synergy_reward,
+                'strategy': strategy_reward,
+                'ante_bonus': ante_bonus,
+                'total': reward
+            }
             
             # Add scoring breakdown to info
             info['score_breakdown'] = breakdown
             info['final_score'] = final_score
+            info['hand_type'] = hand_type
+            info['cards_played'] = len(selected_game_cards)
             
-            # Check round end conditions
-            if self.state.chips_scored >= self.state.chips_needed:
-                reward += 50
+            # Check round end conditions using ROUND score
+            if self.state.round_chips_scored >= self.state.chips_needed:
+                # Beat the blind! Big bonus
+                blind_clear_bonus = 25.0 + (10.0 * self.state.ante)
+                reward += min(50.0, blind_clear_bonus)  # Cap blind clear bonus
                 self._advance_round()
                 info['beat_blind'] = True
             elif self.state.hands_left <= 1:
-                reward -= 100
+                # Failed the blind - penalty based on how close we got
+                failure_penalty = -50.0 * (1.0 - new_progress)
+                reward += failure_penalty
                 terminated = True
                 info['failed'] = True
             else:
@@ -720,8 +929,8 @@ class BalatroEnv(gym.Env):
                 
                 # Draw new cards
                 self.game._draw_cards()
-                #self._sync_state_from_game()  # ← THIS IS RESETTING THE SCORE!
-
+                # Don't call _sync_state_from_game() - manually sync only what's needed
+                self.state.hand_indexes = self.game.hand_indexes.copy()
                             
                 # Apply boss blind effects to newly drawn hand
                 if self.state.boss_blind_active and self.boss_blind_manager.active_blind:
@@ -757,6 +966,8 @@ class BalatroEnv(gym.Env):
             # Get discarded cards
             discarded = []
             purple_seal_count = 0
+            discard_joker_names = []
+            
             for idx in self.state.selected_cards:
                 if idx < len(self.state.hand_indexes):
                     card_idx = self.state.hand_indexes[idx]
@@ -781,6 +992,7 @@ class BalatroEnv(gym.Env):
                 'is_first_discard': self.state.discards_left == self.game.discards
             }
             
+            money_from_discards = 0
             for joker in self.state.jokers:
                 effect = self.joker_effects_engine.apply_joker_effect(
                     type('Joker', (), {'name': joker.name}), 
@@ -788,7 +1000,11 @@ class BalatroEnv(gym.Env):
                     self.state.to_dict()
                 )
                 if effect and 'money' in effect:
+                    money_from_discards += effect['money']
                     self.state.money += effect['money']
+                # Track discard jokers
+                if joker.name in ['Faceless Joker', 'Hit the Road', 'Reserved Parking', 'Luchador']:
+                    discard_joker_names.append(joker.name)
             
             # Execute discard
             self._sync_state_to_game()
@@ -804,10 +1020,10 @@ class BalatroEnv(gym.Env):
             # Create tarot cards from purple seals
             if purple_seal_count > 0:
                 tarots = ['The Fool', 'The Magician', 'The High Priestess', 'The Empress', 
-                         'The Emperor', 'The Hierophant', 'The Lovers', 'The Chariot',
-                         'Strength', 'The Hermit', 'Wheel of Fortune', 'Justice',
-                         'The Hanged Man', 'Death', 'Temperance', 'The Devil',
-                         'The Tower', 'The Star', 'The Moon', 'The Sun', 'Judgement', 'The World']
+                        'The Emperor', 'The Hierophant', 'The Lovers', 'The Chariot',
+                        'Strength', 'The Hermit', 'Wheel of Fortune', 'Justice',
+                        'The Hanged Man', 'Death', 'Temperance', 'The Devil',
+                        'The Tower', 'The Star', 'The Moon', 'The Sun', 'Judgement', 'The World']
                 
                 for _ in range(purple_seal_count):
                     if len(self.state.consumables) < self.state.consumable_slots:
@@ -815,8 +1031,24 @@ class BalatroEnv(gym.Env):
                         self.state.consumables.append(tarot)
                         info['created_tarot'] = tarot
             
-            reward = 0.5
+            # Enhanced discard reward
+            reward = 0.2  # Base discard value
             
+            # Bonus for discard synergies
+            if discard_joker_names:
+                reward += 0.5 * len(discard_joker_names)
+            
+            # Money earned bonus
+            if money_from_discards > 0:
+                reward += money_from_discards / 5.0
+            
+            # Strategic discard bonus (when we have good cards to draw)
+            progress = self.state.round_chips_scored / max(1, self.state.chips_needed)
+            if progress < 0.5 and self.state.discards_left > 1:
+                reward += 0.5  # Encourage discarding when behind
+            elif progress > 0.8 and self.state.discards_left > 1:
+                reward -= 0.3  # Discourage wasteful discards when ahead
+                
         elif Action.SELECT_CARD_BASE <= action < Action.SELECT_CARD_BASE + Action.SELECT_CARD_COUNT:
             card_idx = action - Action.SELECT_CARD_BASE
             if card_idx < len(self.state.hand_indexes):
@@ -1029,7 +1261,9 @@ class BalatroEnv(gym.Env):
             blind_type = action - Action.SELECT_BLIND_BASE  # 0=small, 1=big, 2=boss
             self.state.round = blind_type + 1
             blind_key = ['small', 'big', 'boss'][blind_type]
-            self.state.chips_needed = BLIND_CHIPS[min(self.state.ante, 8)][blind_key]
+            
+            # Use the new scaling function
+            self.state.chips_needed = get_blind_chips(self.state.ante, blind_key)
             
             # Handle boss blind activation
             if blind_type == 2:  # Boss blind
@@ -1065,7 +1299,7 @@ class BalatroEnv(gym.Env):
             # Transition to play
             self.state.phase = Phase.PLAY
             self._sync_state_from_game()
-            self.game._draw_cards()       # Draw the initial hand ← THIS WAS MISSING!
+            self.game._draw_cards()       # Draw the initial hand
             self._sync_state_from_game()  # Sync FROM game to get the drawn cards
 
         elif action == Action.SKIP_BLIND:
@@ -1117,15 +1351,20 @@ class BalatroEnv(gym.Env):
             self.state.boss_blind_active = False
             self.state.face_down_cards = []
         
-        # Reset round stats
+        # Reset ROUND stats (not total stats)
+        self.state.round_chips_scored = 0  # Reset round score
         self.state.best_hand_this_ante = 0
         self.state.hands_played_ante = 0
-        #self.state.chips_scored = 0
+        # DO NOT reset chips_scored - that's career total
         
         # Progress ante/round
         if self.state.round == 3:
             self.state.ante += 1
             self.state.round = 1
+            
+            # Add termination check
+            if self.state.ante > 100:
+                return  # Don't continue if we've hit max ante
         else:
             self.state.round += 1
         
@@ -1249,15 +1488,18 @@ class BalatroEnv(gym.Env):
         obs = {
             'hand': hand_array,
             'hand_size': np.int8(len(self.state.hand_indexes)),
-            'deck_size': np.int8(sum(1 for _ in self.state.deck)),  # All cards in new system
+            'deck_size': np.int8(sum(1 for _ in self.state.deck)),
             'selected_cards': np.array([1 if i in self.state.selected_cards else 0 for i in range(8)]),
             
-            'chips_scored': np.int32(self.state.chips_scored),
-            'mult': np.int32(1),  # Base mult
+            # FIXED: Use proper data types
+            'chips_scored': np.int64(self.state.chips_scored),  # Changed to int64
+            'round_chips_scored': np.int32(self.state.round_chips_scored),
+            'progress_ratio': np.float32(min(2.0, self.state.round_chips_scored / max(1, self.state.chips_needed))),
+            'mult': np.int32(1),
             'chips_needed': np.int32(self.state.chips_needed),
             'money': np.int32(self.state.money),
             
-            'ante': np.int8(self.state.ante),
+            'ante': np.int16(self.state.ante),  # Changed to int16
             'round': np.int8(self.state.round),
             'hands_left': np.int8(self.state.hands_left),
             'discards_left': np.int8(self.state.discards_left),
@@ -1275,11 +1517,11 @@ class BalatroEnv(gym.Env):
             'shop_costs': np.zeros(10, dtype=np.int16),
             'shop_rerolls': np.int16(self.state.shop_reroll_cost),
             
-            'hand_levels': np.array(list(self.state.hand_levels.values())[:12], dtype=np.int8),            
+            'hand_levels': np.array(list(self.state.hand_levels.values())[:12], dtype=np.int8),
             'phase': np.int8(self.state.phase),
             'action_mask': self._get_action_mask(),
             
-            'hands_played': np.int16(self.state.hands_played_total),
+            'hands_played': np.int32(self.state.hands_played_total),  # Changed to int32
             'best_hand_this_ante': np.int32(self.state.best_hand_this_ante),
             
             # Boss blind info
@@ -1385,7 +1627,8 @@ class BalatroEnv(gym.Env):
             print(f"BOSS BLIND: {self.boss_blind_manager.active_blind.name}")
             print(f"Effect: {self.boss_blind_manager.active_blind.description}")
         
-        print(f"Score: {self.state.chips_scored}/{self.state.chips_needed} | Money: ${self.state.money}")
+        # FIXED: Show round score, not total score
+        print(f"Score: {self.state.round_chips_scored}/{self.state.chips_needed} | Total: {self.state.chips_scored} | Money: ${self.state.money}")
         print(f"Hands: {self.state.hands_left} | Discards: {self.state.discards_left}")
         
         if self.state.phase == Phase.PLAY:
@@ -1457,9 +1700,9 @@ class BalatroEnv(gym.Env):
         
         elif self.state.phase == Phase.BLIND_SELECT:
             print("\n=== SELECT BLIND ===")
-            print(f"[0] Small Blind: {BLIND_CHIPS[min(self.state.ante, 8)]['small']} chips")
-            print(f"[1] Big Blind: {BLIND_CHIPS[min(self.state.ante, 8)]['big']} chips")
-            print(f"[2] Boss Blind: {BLIND_CHIPS[min(self.state.ante, 8)]['boss']} chips")
+            print(f"[0] Small Blind: {get_blind_chips(self.state.ante, 'small')} chips")
+            print(f"[1] Big Blind: {get_blind_chips(self.state.ante, 'big')} chips")
+            print(f"[2] Boss Blind: {get_blind_chips(self.state.ante, 'boss')} chips")
             print(f"[S] Skip Blind")
         
         if self.state.jokers:
@@ -1479,7 +1722,6 @@ class BalatroEnv(gym.Env):
         
         if self.state.consumables:
             print(f"Consumables ({len(self.state.consumables)}/{self.state.consumable_slots}): {', '.join(self.state.consumables)}")
-
     def close(self):
         pass
 
