@@ -14,15 +14,13 @@ from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback,
 from stable_baselines3.common.monitor import Monitor
 
 # Import your Balatro environment
-import sys
-sys.path.append(os.path.expanduser('~/balatro_rl_project'))
-from balatro_gym.envs.balatro_env_2 import BalatroEnv
-
+import gymnasium
+import balatro_gym
 
 def make_env(rank: int, seed: int = 0):
     """Create a single environment instance"""
     def _init():
-        env = BalatroEnv(seed=seed + rank)
+        env = gymnasium.make("balatro-gym/Balatro-v1", seed=seed + rank)
         env = Monitor(env)
         return env
     return _init
@@ -30,22 +28,22 @@ def make_env(rank: int, seed: int = 0):
 
 def train_balatro_hpc(args):
     """Main training function for HPC"""
-    
+
     # Setup directories
     job_id = os.environ.get('SLURM_JOB_ID', 'local')
     run_dir = Path(f"run_{job_id}")
     run_dir.mkdir(exist_ok=True)
-    
+
     model_dir = run_dir / "models"
     model_dir.mkdir(exist_ok=True)
-    
+
     log_dir = run_dir / "logs"
     log_dir.mkdir(exist_ok=True)
-    
+
     print(f"Starting Balatro RL Training")
     print(f"Job ID: {job_id}")
     print(f"Run directory: {run_dir}")
-    
+
     # Check GPU availability
     if torch.cuda.is_available():
         print(f"GPU available: {torch.cuda.get_device_name(0)}")
@@ -53,24 +51,24 @@ def train_balatro_hpc(args):
     else:
         print("No GPU available, using CPU")
         device = 'cpu'
-    
+
     # Create environments
     print(f"\nCreating {args.n_envs} parallel environments...")
-    
+
     if args.n_envs > 1:
         # Use SubprocVecEnv for true parallelism
         env = SubprocVecEnv([make_env(i, args.seed) for i in range(args.n_envs)])
     else:
         # Use DummyVecEnv for single environment
         env = DummyVecEnv([make_env(0, args.seed)])
-    
+
     # Add normalization wrapper
     env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
-    
+
     # Create evaluation environment
     eval_env = DummyVecEnv([make_env(1000, args.seed)])
     eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False, clip_obs=10.0)
-    
+
     # Create PPO model
     print("\nInitializing PPO model...")
     model = PPO(
@@ -93,10 +91,10 @@ def train_balatro_hpc(args):
             "net_arch": [dict(pi=[512, 512], vf=[512, 512])]
         }
     )
-    
+
     # Setup callbacks
     callbacks = []
-    
+
     # Checkpoint callback - save model periodically
     checkpoint_callback = CheckpointCallback(
         save_freq=max(args.checkpoint_freq // args.n_envs, 1),
@@ -105,7 +103,7 @@ def train_balatro_hpc(args):
         save_vecnormalize=True
     )
     callbacks.append(checkpoint_callback)
-    
+
     # Evaluation callback - evaluate and save best model
     eval_callback = EvalCallback(
         eval_env,
@@ -117,13 +115,13 @@ def train_balatro_hpc(args):
         render=False
     )
     callbacks.append(eval_callback)
-    
+
     # Start training
     print(f"\nStarting training for {args.timesteps:,} timesteps...")
     print(f"This will generate approximately {args.timesteps // args.n_envs:,} episodes")
-    
+
     start_time = time.time()
-    
+
     try:
         model.learn(
             total_timesteps=args.timesteps,
@@ -132,25 +130,25 @@ def train_balatro_hpc(args):
             progress_bar=True,
             reset_num_timesteps=False
         )
-        
+
         training_time = time.time() - start_time
         print(f"\nTraining completed in {training_time/3600:.2f} hours")
         print(f"Throughput: {args.timesteps/training_time:.2f} steps/second")
-        
+
     except KeyboardInterrupt:
         print("\nTraining interrupted by user")
         training_time = time.time() - start_time
-    
+
     except Exception as e:
         print(f"\nError during training: {e}")
         raise
-    
+
     finally:
         # Save final model
         print("\nSaving final model...")
         model.save(str(model_dir / "final_model"))
         env.save(str(model_dir / "vec_normalize.pkl"))
-        
+
         # Save training summary
         summary = {
             "job_id": job_id,
@@ -161,14 +159,14 @@ def train_balatro_hpc(args):
             "device": device,
             "completed": datetime.now().isoformat()
         }
-        
+
         import json
         with open(model_dir / "training_summary.json", "w") as f:
             json.dump(summary, f, indent=2)
-        
+
         print(f"\nAll models saved to: {model_dir}")
         print("Training complete!")
-        
+
         # Close environments
         env.close()
         eval_env.close()
@@ -190,14 +188,14 @@ def main():
                        help="Save checkpoint every N steps")
     parser.add_argument("--eval-freq", type=int, default=50_000,
                        help="Evaluate every N steps")
-    
+
     args = parser.parse_args()
-    
+
     # Print configuration
     print("Configuration:")
     for key, value in vars(args).items():
         print(f"  {key}: {value}")
-    
+
     train_balatro_hpc(args)
 
 
