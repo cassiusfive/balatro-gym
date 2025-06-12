@@ -396,7 +396,7 @@ class BalatroEnv(gym.Env):
             'chips_scored': spaces.Box(0, 10_000_000_000, (1,), dtype=np.int64),  # Changed to int64
             'round_chips_scored': spaces.Box(0, 10_000_000, (1,), dtype=np.int32),
             'progress_ratio': spaces.Box(0.0, 2.0, (1,), dtype=np.float32),
-            'mult': spaces.Box(0, 10_000, (), dtype=np.int32),
+            'mult': spaces.Box(0, 10_000, (1,), dtype=np.int32),
             'chips_needed': spaces.Box(0, 10_000_000, (1,), dtype=np.int32),  # Increased range
             'money': spaces.Box(-20, 999, (1,), dtype=np.int32),
 
@@ -1487,46 +1487,44 @@ class BalatroEnv(gym.Env):
 
         obs = {
             'hand': hand_array,
-            'hand_size': np.int8(len(self.state.hand_indexes)),
-            'deck_size': np.int8(sum(1 for _ in self.state.deck)),
+            'hand_size': np.array([len(self.state.hand_indexes)], dtype=np.int8),
+            'deck_size': np.array([sum(1 for _ in self.state.deck)], dtype=np.int8),
             'selected_cards': np.array([1 if i in self.state.selected_cards else 0 for i in range(8)]),
 
-            # FIXED: Use proper data types
-            'chips_scored': np.int64(self.state.chips_scored),  # Changed to int64
-            'round_chips_scored': np.int32(self.state.round_chips_scored),
-            'progress_ratio': np.float32(min(2.0, self.state.round_chips_scored / max(1, self.state.chips_needed))),
-            'mult': np.int32(1),
-            'chips_needed': np.int32(self.state.chips_needed),
-            'money': np.int32(self.state.money),
+            'chips_scored': np.array([self.state.chips_scored], dtype=np.int64),
+            'round_chips_scored': np.array([self.state.round_chips_scored], dtype=np.int32),
+            'progress_ratio': np.array([min(2.0, self.state.round_chips_scored / max(1, self.state.chips_needed))], dtype=np.float32),
+            'mult': np.array([1], dtype=np.int32),
+            'chips_needed': np.array([self.state.chips_needed], dtype=np.int32),
+            'money': np.array([self.state.money], dtype=np.int32),
 
-            'ante': np.int16(self.state.ante),  # Changed to int16
-            'round': np.int8(self.state.round),
-            'hands_left': np.int8(self.state.hands_left),
-            'discards_left': np.int8(self.state.discards_left),
+            'ante': np.array([self.state.ante], dtype=np.int16),
+            'round': np.array([self.state.round], dtype=np.int8),
+            'hands_left': np.array([self.state.hands_left], dtype=np.int8),
+            'discards_left': np.array([self.state.discards_left], dtype=np.int8),
 
-            'joker_count': np.int8(len(self.state.jokers)),
+            'joker_count': np.array([len(self.state.jokers)], dtype=np.int8),
             'joker_ids': np.array([j.id for j in self.state.jokers] +
                                  [0] * (10 - len(self.state.jokers)), dtype=np.int16),
-            'joker_slots': np.int8(self.state.joker_slots),
+            'joker_slots': np.array([self.state.joker_slots], dtype=np.int8),
 
-            'consumable_count': np.int8(len(self.state.consumables)),
+            'consumable_count': np.array([len(self.state.consumables)], dtype=np.int8),
             'consumables': np.array(consumable_ids, dtype=np.int16),
-            'consumable_slots': np.int8(self.state.consumable_slots),
+            'consumable_slots': np.array([self.state.consumable_slots], dtype=np.int8),
 
             'shop_items': np.zeros(10, dtype=np.int16),
             'shop_costs': np.zeros(10, dtype=np.int16),
-            'shop_rerolls': np.int16(self.state.shop_reroll_cost),
+            'shop_rerolls': np.array([self.state.shop_reroll_cost], dtype=np.int16),
 
             'hand_levels': np.array(list(self.state.hand_levels.values())[:12], dtype=np.int8),
-            'phase': np.int8(self.state.phase),
+            'phase': np.array([self.state.phase], dtype=np.int8),
             'action_mask': self._get_action_mask(),
 
-            'hands_played': np.int32(self.state.hands_played_total),  # Changed to int32
-            'best_hand_this_ante': np.int32(self.state.best_hand_this_ante),
+            'hands_played': np.array([self.state.hands_played_total], dtype=np.int32),
+            'best_hand_this_ante': np.array([self.state.best_hand_this_ante], dtype=np.int32),
 
-            # Boss blind info
-            'boss_blind_active': np.int8(1 if self.state.boss_blind_active else 0),
-            'boss_blind_type': np.int8(self.state.active_boss_blind.value if self.state.active_boss_blind else 0),
+            'boss_blind_active': np.array([1 if self.state.boss_blind_active else 0], dtype=np.int8),
+            'boss_blind_type': np.array([self.state.active_boss_blind.value if self.state.active_boss_blind else 0], dtype=np.int8),
             'face_down_cards': np.array([1 if i in self.state.face_down_cards else 0 for i in range(8)]),
         }
 
