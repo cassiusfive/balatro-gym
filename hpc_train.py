@@ -26,6 +26,64 @@ def make_env(rank: int, seed: int = 0):
     return _init
 
 
+def create_vec_normalize_with_auto_keys(env, norm_reward=True, clip_obs=10.0):
+    """
+    Create VecNormalize that automatically detects Box observation spaces
+    and only normalizes those keys.
+    """
+    obs_space = env.observation_space
+
+    print(f"Observation space: {obs_space}")
+
+    # Check if observation space is a Dict/MultiDict with multiple components
+    if hasattr(obs_space, 'spaces') and hasattr(obs_space.spaces, 'items'):
+        # Find all Box observation keys
+        box_keys = []
+        for key, space in obs_space.spaces.items():
+            if isinstance(space, gymnasium.spaces.Box):
+                box_keys.append(key)
+                print(f"  Found Box space to normalize: '{key}' {space}")
+            else:
+                print(f"  Skipping non-Box space: '{key}' {space}")
+
+        if box_keys:
+            print(f"Auto-detected observation keys for normalization: {box_keys}")
+            return VecNormalize(
+                env,
+                norm_obs=True,
+                norm_reward=norm_reward,
+                clip_obs=clip_obs,
+                norm_obs_keys=box_keys
+            )
+        else:
+            print("No Box observation spaces found - disabling observation normalization")
+            return VecNormalize(
+                env,
+                norm_obs=False,
+                norm_reward=norm_reward,
+                clip_obs=clip_obs
+            )
+
+    # Single observation space (not Dict)
+    elif isinstance(obs_space, gymnasium.spaces.Box):
+        print("Single Box observation space - using default normalization")
+        return VecNormalize(
+            env,
+            norm_obs=True,
+            norm_reward=norm_reward,
+            clip_obs=clip_obs
+        )
+
+    else:
+        print(f"Non-Box observation space ({type(obs_space).__name__}) - disabling observation normalization")
+        return VecNormalize(
+            env,
+            norm_obs=False,
+            norm_reward=norm_reward,
+            clip_obs=clip_obs
+        )
+
+
 def train_balatro_hpc(args):
     """Main training function for HPC"""
 
@@ -62,12 +120,14 @@ def train_balatro_hpc(args):
         # Use DummyVecEnv for single environment
         env = DummyVecEnv([make_env(0, args.seed)])
 
-    # Add normalization wrapper
-    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.0)
+    # Add normalization wrapper with auto-detection
+    print("\nSetting up training environment normalization:")
+    env = create_vec_normalize_with_auto_keys(env, norm_reward=True, clip_obs=10.0)
 
     # Create evaluation environment
     eval_env = DummyVecEnv([make_env(1000, args.seed)])
-    eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False, clip_obs=10.0)
+    print("\nSetting up evaluation environment normalization:")
+    eval_env = create_vec_normalize_with_auto_keys(eval_env, norm_reward=False, clip_obs=10.0)
 
     # Create PPO model
     print("\nInitializing PPO model...")
