@@ -436,36 +436,37 @@ class BalatroEnv(gym.Env):
             'boss_blind_active': spaces.Box(0, 1, (), dtype=np.int8),
             'boss_blind_type': spaces.Box(0, 30, (), dtype=np.int8),
             'face_down_cards': spaces.MultiBinary(8),
-                    # ADD: Better hand representation
-            'hand_one_hot': spaces.Box(0, 1, (8, 52), dtype=np.float32),  # One-hot encoding of cards
-            'hand_suits': spaces.Box(0, 4, (8,), dtype=np.int8),  # Suit counts per position
-            'hand_ranks': spaces.Box(0, 13, (8,), dtype=np.int8),  # Rank values per position
 
-            # ADD: Hand potential analysis
-            'rank_counts': spaces.Box(0, 4, (13,), dtype=np.int8),  # How many of each rank in hand
-            'suit_counts': spaces.Box(0, 8, (4,), dtype=np.int8),   # How many of each suit in hand
-            'straight_potential': spaces.Box(0, 1, (), dtype=np.float32),  # Probability of making straight
-            'flush_potential': spaces.Box(0, 1, (), dtype=np.float32),     # Probability of making flush
+            # # ADD: Better hand representation
+            # 'hand_one_hot': spaces.Box(0, 1, (8, 52), dtype=np.float32),  # One-hot encoding of cards
+            # 'hand_suits': spaces.Box(0, 4, (8,), dtype=np.int8),  # Suit counts per position
+            # 'hand_ranks': spaces.Box(0, 13, (8,), dtype=np.int8),  # Rank values per position
 
-            # ADD: Historical context
-            'avg_score_per_hand': spaces.Box(0, 10000, (), dtype=np.float32),
-            'hands_until_shop': spaces.Box(0, 20, (), dtype=np.int8),
-            'rounds_until_boss': spaces.Box(0, 3, (), dtype=np.int8),
+            # # ADD: Hand potential analysis
+            # 'rank_counts': spaces.Box(0, 4, (13,), dtype=np.int8),  # How many of each rank in hand
+            # 'suit_counts': spaces.Box(0, 8, (4,), dtype=np.int8),   # How many of each suit in hand
+            # 'straight_potential': spaces.Box(0, 1, (), dtype=np.float32),  # Probability of making straight
+            # 'flush_potential': spaces.Box(0, 1, (), dtype=np.float32),     # Probability of making flush
 
-            # ADD: Joker synergy indicators
-            'has_mult_jokers': spaces.Box(0, 1, (), dtype=np.int8),
-            'has_chip_jokers': spaces.Box(0, 1, (), dtype=np.int8),
-            'has_xmult_jokers': spaces.Box(0, 1, (), dtype=np.int8),
-            'has_economy_jokers': spaces.Box(0, 1, (), dtype=np.int8),
-            'hand_potential_scores': spaces.Box(0, 10000, (12,), dtype=np.int32),  # Expected score for each hand type
-            'joker_synergy_score': spaces.Box(0, 10, (), dtype=np.float32),
-            'risk_level': spaces.Box(0, 1, (), dtype=np.float32),  # How close to losing
-            'economy_health': spaces.Box(0, 1, (), dtype=np.float32),  # Money relative to needs
+            # # ADD: Historical context
+            # 'avg_score_per_hand': spaces.Box(0, 10000, (), dtype=np.float32),
+            # 'hands_until_shop': spaces.Box(0, 20, (), dtype=np.int8),
+            # 'rounds_until_boss': spaces.Box(0, 3, (), dtype=np.int8),
+
+            # # ADD: Joker synergy indicators
+            # 'has_mult_jokers': spaces.Box(0, 1, (), dtype=np.int8),
+            # 'has_chip_jokers': spaces.Box(0, 1, (), dtype=np.int8),
+            # 'has_xmult_jokers': spaces.Box(0, 1, (), dtype=np.int8),
+            # 'has_economy_jokers': spaces.Box(0, 1, (), dtype=np.int8),
+            # 'hand_potential_scores': spaces.Box(0, 10000, (12,), dtype=np.int32),  # Expected score for each hand type
+            # 'joker_synergy_score': spaces.Box(0, 10, (), dtype=np.float32),
+            # 'risk_level': spaces.Box(0, 1, (), dtype=np.float32),  # How close to losing
+            # 'economy_health': spaces.Box(0, 1, (), dtype=np.float32),  # Money relative to needs
 
 
-            # ADD: Risk indicators
-            'blind_difficulty': spaces.Box(0, 1, (), dtype=np.float32),  # Normalized difficulty
-            'win_probability': spaces.Box(0, 1, (), dtype=np.float32),   # Estimated win chance
+            # # ADD: Risk indicators
+            # 'blind_difficulty': spaces.Box(0, 1, (), dtype=np.float32),  # Normalized difficulty
+            # 'win_probability': spaces.Box(0, 1, (), dtype=np.float32),   # Estimated win chance
 
         })
     def _calculate_hand_features(self, hand_cards: List[Card]) -> Dict[str, np.ndarray]:
