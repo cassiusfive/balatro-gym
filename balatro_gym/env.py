@@ -18,9 +18,9 @@ At each step, `action_mask()` exposes only the legal subset of that space.
 Observation
 -----------
 Dict(
-    cards       : MultiBinary(8×52)  – one-hot encoding of the 8-card hand  
-    phase       : Discrete(2)        – 0 = discard, 1 = select-five  
-    action_mask : MultiBinary(312)   – mask of currently valid actions  
+    cards       : MultiBinary(8×52)  – one-hot encoding of the 8-card hand
+    phase       : Discrete(2)        – 0 = discard, 1 = select-five
+    action_mask : MultiBinary(312)   – mask of currently valid actions
 )
 
 Reward
@@ -36,7 +36,7 @@ Dependencies
 
 
 from __future__ import annotations
-from balatro_gym.balatro_game import Card, BalatroGame
+from balatro_gym.core.balatro_game import Card, BalatroGame
 
 import random
 from itertools import combinations
@@ -243,4 +243,3 @@ def make(id: str = "EightCardDraw-v0", **kwargs):
     if id != "EightCardDraw-v0":
         raise ValueError(f"Unknown env id: {id}")
     return EightCardDrawEnv(**kwargs)
-
