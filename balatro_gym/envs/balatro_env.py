@@ -388,53 +388,53 @@ class BalatroEnv(gym.Env):
         return spaces.Dict({
             # Hand and card state
             'hand': spaces.Box(-1, 51, (8,), dtype=np.int8),
-            'hand_size': spaces.Box(0, 12, (), dtype=np.int8),
-            'deck_size': spaces.Box(0, 52, (), dtype=np.int8),
+            'hand_size': spaces.Box(0, 12, (1,), dtype=np.int8),
+            'deck_size': spaces.Box(0, 52, (1,), dtype=np.int8),
             'selected_cards': spaces.MultiBinary(8),
 
             # Scoring state - FIXED: Use int64 for large scores
-            'chips_scored': spaces.Box(0, 10_000_000_000, (), dtype=np.int64),  # Changed to int64
-            'round_chips_scored': spaces.Box(0, 10_000_000, (), dtype=np.int32),
-            'progress_ratio': spaces.Box(0.0, 2.0, (), dtype=np.float32),
+            'chips_scored': spaces.Box(0, 10_000_000_000, (1,), dtype=np.int64),  # Changed to int64
+            'round_chips_scored': spaces.Box(0, 10_000_000, (1,), dtype=np.int32),
+            'progress_ratio': spaces.Box(0.0, 2.0, (1,), dtype=np.float32),
             'mult': spaces.Box(0, 10_000, (), dtype=np.int32),
-            'chips_needed': spaces.Box(0, 10_000_000, (), dtype=np.int32),  # Increased range
-            'money': spaces.Box(-20, 999, (), dtype=np.int32),
+            'chips_needed': spaces.Box(0, 10_000_000, (1,), dtype=np.int32),  # Increased range
+            'money': spaces.Box(-20, 999, (1,), dtype=np.int32),
 
             # Round state - FIXED: Use larger types
-            'ante': spaces.Box(1, 1000, (), dtype=np.int16),  # Changed to int16
-            'round': spaces.Box(1, 3, (), dtype=np.int8),
-            'hands_left': spaces.Box(0, 12, (), dtype=np.int8),
-            'discards_left': spaces.Box(0, 10, (), dtype=np.int8),
+            'ante': spaces.Box(1, 1000, (1,), dtype=np.int16),  # Changed to int16
+            'round': spaces.Box(1, 3, (1,), dtype=np.int8),
+            'hands_left': spaces.Box(0, 12, (1,), dtype=np.int8),
+            'discards_left': spaces.Box(0, 10, (1,), dtype=np.int8),
 
             # Jokers
-            'joker_count': spaces.Box(0, 10, (), dtype=np.int8),
+            'joker_count': spaces.Box(0, 10, (1,), dtype=np.int8),
             'joker_ids': spaces.Box(0, 200, (10,), dtype=np.int16),
-            'joker_slots': spaces.Box(0, 10, (), dtype=np.int8),
+            'joker_slots': spaces.Box(0, 10, (1,), dtype=np.int8),
 
             # Consumables
-            'consumable_count': spaces.Box(0, 5, (), dtype=np.int8),
+            'consumable_count': spaces.Box(0, 5, (1,), dtype=np.int8),
             'consumables': spaces.Box(0, 100, (5,), dtype=np.int16),
-            'consumable_slots': spaces.Box(0, 5, (), dtype=np.int8),
+            'consumable_slots': spaces.Box(0, 5, (1,), dtype=np.int8),
 
             # Shop
             'shop_items': spaces.Box(0, 300, (10,), dtype=np.int16),
             'shop_costs': spaces.Box(0, 5000, (10,), dtype=np.int16),
-            'shop_rerolls': spaces.Box(0, 999, (), dtype=np.int16),
+            'shop_rerolls': spaces.Box(0, 999, (1,), dtype=np.int16),
 
             # Hand levels (for each poker hand type)
             'hand_levels': spaces.Box(0, 15, (12,), dtype=np.int8),
 
             # Phase and action validity
-            'phase': spaces.Box(0, 3, (), dtype=np.int8),
+            'phase': spaces.Box(0, 3, (1,), dtype=np.int8),
             'action_mask': spaces.MultiBinary(Action.ACTION_SPACE_SIZE),
 
             # Stats for reward shaping
-            'hands_played': spaces.Box(0, 10000, (), dtype=np.int32),  # Increased range
-            'best_hand_this_ante': spaces.Box(0, 10_000_000, (), dtype=np.int32),  # Increased range
+            'hands_played': spaces.Box(0, 10000, (1,), dtype=np.int32),  # Increased range
+            'best_hand_this_ante': spaces.Box(0, 10_000_000, (1,), dtype=np.int32),  # Increased range
 
             # Boss blind info
-            'boss_blind_active': spaces.Box(0, 1, (), dtype=np.int8),
-            'boss_blind_type': spaces.Box(0, 30, (), dtype=np.int8),
+            'boss_blind_active': spaces.Box(0, 1, (1,), dtype=np.int8),
+            'boss_blind_type': spaces.Box(0, 30, (1,), dtype=np.int8),
             'face_down_cards': spaces.MultiBinary(8),
 
             # # ADD: Better hand representation
@@ -467,7 +467,6 @@ class BalatroEnv(gym.Env):
             # # ADD: Risk indicators
             # 'blind_difficulty': spaces.Box(0, 1, (), dtype=np.float32),  # Normalized difficulty
             # 'win_probability': spaces.Box(0, 1, (), dtype=np.float32),   # Estimated win chance
-
         })
     def _calculate_hand_features(self, hand_cards: List[Card]) -> Dict[str, np.ndarray]:
         """Calculate advanced hand features for better decision making"""
