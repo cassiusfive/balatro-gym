@@ -39,7 +39,7 @@ nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
 
 # Run training
 echo "Starting training..."
-python simple_hpc_train.py \
+python hpc_train.py \
     --timesteps 10000000 \
     --n-envs 16 \
     --seed 42 \
