@@ -1649,11 +1649,11 @@ class BalatroEnv(gym.Env):
                             if card_state.enhancement != Enhancement.NONE:
                                 enhancement_symbols = {
                                     Enhancement.BONUS: '+',
-                                    Enhancement.MULT: '×',
+                                    Enhancement.MULT: 'Ã—',
                                     Enhancement.WILD: 'W',
                                     Enhancement.GLASS: 'G',
                                     Enhancement.STEEL: 'S',
-                                    Enhancement.STONE: '◊',
+                                    Enhancement.STONE: 'â—Š',
                                     Enhancement.GOLD: '$',
                                     Enhancement.LUCKY: '?'
                                 }
@@ -1670,12 +1670,12 @@ class BalatroEnv(gym.Env):
                             
                             if card_state.seal != Seal.NONE:
                                 seal_symbols = {
-                                    Seal.GOLD: '●G',
-                                    Seal.RED: '●R',
-                                    Seal.BLUE: '●B',
-                                    Seal.PURPLE: '●P'
+                                    Seal.GOLD: 'â—G',
+                                    Seal.RED: 'â—R',
+                                    Seal.BLUE: 'â—B',
+                                    Seal.PURPLE: 'â—P'
                                 }
-                                modifiers.append(seal_symbols.get(card_state.seal, '●'))
+                                modifiers.append(seal_symbols.get(card_state.seal, 'â—'))
                             
                             if modifiers:
                                 card_str = f"{card_str}[{''.join(modifiers)}]"
@@ -1688,13 +1688,13 @@ class BalatroEnv(gym.Env):
             
             # Show legend if any cards have modifiers
             if any(idx in self.state.card_states for idx in self.state.hand_indexes):
-                print("Legend: + Bonus | × Mult | W Wild | G Glass | S Steel | ◊ Stone | $ Gold | ? Lucky")
-                print("        F Foil | H Holo | P Polychrome | - Negative | ● Seal (G/R/B/P)")
+                print("Legend: + Bonus | Ã— Mult | W Wild | G Glass | S Steel | â—Š Stone | $ Gold | ? Lucky")
+                print("        F Foil | H Holo | P Polychrome | - Negative | â— Seal (G/R/B/P)")
         
         elif self.state.phase == Phase.SHOP and self.shop:
             print("\n=== SHOP ===")
             for i, item in enumerate(self.shop.inventory):
-                affordable = "✓" if self.state.money >= item.cost else "✗"
+                affordable = "âœ“" if self.state.money >= item.cost else "âœ—"
                 print(f"[{i}] {affordable} {item.name:<25} ${item.cost}")
             print(f"\nReroll cost: ${self.state.shop_reroll_cost}")
         
@@ -1770,7 +1770,7 @@ class BalatroEnvValidator:
                 if not np.array_equal(obs1[key], obs2[key]):
                     raise AssertionError(f"Observations differ at step {i} for key: {key}")
         
-        print(f"✓ Determinism validated over {steps} steps")
+        print(f"âœ“ Determinism validated over {steps} steps")
     
     @staticmethod
     def validate_action_masking(env):
@@ -1793,7 +1793,7 @@ class BalatroEnvValidator:
                 if reward != -1.0:
                     raise AssertionError(f"Invalid action {action} gave reward {reward}")
         
-        print("✓ Action masking validated")
+        print("âœ“ Action masking validated")
 
 
 # ---------------------------------------------------------------------------
@@ -1882,6 +1882,6 @@ if __name__ == "__main__":
     # Check they match
     for key in obs_restored:
         if not np.array_equal(obs_after[key], obs_restored[key]):
-            print(f"✓ State properly changed for key: {key}")
+            print(f"âœ“ State properly changed for key: {key}")
     
-    print("✓ Save/load working correctly")
+    print("âœ“ Save/load working correctly")
