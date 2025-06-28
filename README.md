@@ -9,13 +9,3 @@
 | 0     | Play hand       |
 | 1     | Discard hand    |
 | 2-9   | Select card     |
-| WIP   | Use consumable  |
-| WIP   | Sell consumable |
-| WIP   | Reorder jokers  |
-| WIP   | Sell joker      |
-| WIP   | Select blind    |
-| WIP   | Skip blind      |
-| WIP   | Buy pack        |
-| WIP   | Buy card        |
-| WIP   | Buy voucher     |
-| WIP   | Reroll shop     |
